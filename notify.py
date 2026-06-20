@@ -118,7 +118,7 @@ def format_private_message(status: str, stage: str = "") -> str:
     elif status == "fail":
         failure_stage = stage or os.environ.get("CURRENT_STAGE", "unknown")
         details.append(f"Stage: {humanize_stage(failure_stage)}")
-        details.append("Please review the repository locally.")
+        details.append("Please check the build environment.")
 
     return "\n".join([header, *details])
 
