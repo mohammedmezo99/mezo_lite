@@ -1,101 +1,75 @@
+#!/bin/bash
+set -euo pipefail
+
 work_dir=$(pwd)
-source $work_dir/functions.sh
-RCLONE_CONFIG_1DRIVE="$work_dir/rclone.conf"
-ONEDRIVE_REMOTE="starxONEDRIVE"
-os_type=$(cat $work_dir/bin/ddevice/os_type.txt)
-base_rom_code=$(cat $work_dir/bin/ddevice/base_rom_code.txt)
-androidVER=$(cat $work_dir/bin/ddevice/androidver.txt)
-rom_os=$(cat $work_dir/bin/ddevice/rom_os.txt)
-regionTYPE=$(cat $work_dir/bin/ddevice/device_type.txt)
-device_code=$(cat $work_dir/bin/ddevice/device_code.txt)
-baserom_type=$(cat $work_dir/bin/ddevice/romtype.txt)
-device_f=$(cat $work_dir/bin/ddevice/device_f.txt)
+source "$work_dir/functions.sh"
 
-if [ "$1" == "setup" ]; then
-  if [ -z "$2" ] || [ -z "$3" ] || [ -z "$4" ]; then
-    echo "[ERROR] - Please provide rclone token and remote name"
+version=$(< "$work_dir/Version")
+raw_codename=$(< "$work_dir/bin/ddevice/device_code.txt")
+rom_version=$(< "$work_dir/bin/ddevice/base_rom_code.txt")
+android_version=$(< "$work_dir/bin/ddevice/androidver.txt")
+region_type=$(< "$work_dir/bin/ddevice/device_type.txt")
+
+normalize_region() {
+    case "${1,,}" in
+        china) echo "ChinaStable" ;;
+        global) echo "GlobalStable" ;;
+        eeaglobal) echo "EeaStable" ;;
+        inglobal) echo "IndiaStable" ;;
+        idglobal) echo "IdStable" ;;
+        ruglobal) echo "RuStable" ;;
+        twglobal) echo "TwStable" ;;
+        trglobal) echo "TrStable" ;;
+        jpglobal) echo "JpStable" ;;
+        *) echo "$1" ;;
+    esac
+}
+
+codename_upper=$(echo "$raw_codename" | tr '[:lower:]' '[:upper:]')
+region_name=$(normalize_region "$region_type")
+android_tag="A$(echo "$android_version" | tr -cd '0-9')"
+final_name="DeadZoneLite_v${version}_${codename_upper}_${rom_version}_${region_name}-${android_tag}.zip"
+output_file="$work_dir/out/$final_name"
+
+if [[ "${1:-}" == "setup" ]]; then
+    if [[ -z "${RCLONE_CONFIG_BASE64:-}" ]]; then
+        echo "[ERROR] - Missing RCLONE_CONFIG_BASE64"
+        exit 1
+    fi
+
+    printf '%s' "$RCLONE_CONFIG_BASE64" | base64 -d > "$work_dir/rclone.conf"
+    chmod 600 "$work_dir/rclone.conf"
+    exit 0
+fi
+
+source_file=$(find "$work_dir/out" -maxdepth 1 -type f -name "*.zip" | head -n 1)
+if [[ -z "$source_file" ]]; then
+    echo "[ERROR] - No packaged ROM archive found in out/"
     exit 1
-  fi
-  curl  -s -o $work_dir/rclone.conf \
-        -H "Authorization: token $2" \
-        -H "Accept: application/vnd.github.v3.raw" \
-        -L https://api.github.com/repos/$3/contents/$4
-  exit 0
 fi
 
+mv -f "$source_file" "$output_file"
+echo "$final_name" > "$work_dir/bin/ddevice/output_zip.txt"
 
-if [[ $(git branch --show-current) == "beta" ]]; then
-    polyxver="$(cat Version)"
-	status="Development"
-else
-    polyxver="$(cat Version)"
-	status="Official"
+remote_name="${RCLONE_REMOTE_NAME:-gdrive}"
+remote_dir="${RCLONE_UPLOAD_DIR:-}"
+if [[ -z "$remote_dir" ]]; then
+    echo "[ERROR] - Missing RCLONE_UPLOAD_DIR"
+    exit 1
 fi
 
-if [[ $rom_os == "MIUI" ]];then
-    os_type="MIUI"
-else
-    os_type="HyperOS"
+remote_path="${remote_name}:${remote_dir}"
+upload "Uploading DeadZone Lite to Google Drive"
+rclone --config="$work_dir/rclone.conf" copyto "$output_file" "${remote_path}/${final_name}" > /dev/null 2>&1
+
+file_id=$(rclone --config="$work_dir/rclone.conf" lsjson "${remote_path}" | jq -r --arg name "$final_name" '.[] | select(.Name == $name) | .ID' | head -n 1)
+if [[ -z "$file_id" || "$file_id" == "null" ]]; then
+    echo "[ERROR] - Uploaded file ID could not be resolved"
+    exit 1
 fi
 
-repack "Compressing super.img"
-zstd --rm $work_dir/build/baserom/images/super.img -o $work_dir/build/baserom/images/super.img.zst > /dev/null 2>&1
+drive_link="https://drive.google.com/file/d/${file_id}/view?usp=sharing"
+echo "$drive_link" > "$work_dir/bin/ddevice/drive_link.txt"
 
-repack "Generating flashing script"
-if [[ ${baserom_type} == 'payload' ]]; then
-    mkdir -p $work_dir/out/${os_type}_${device_code}_${base_rom_code}/images/
-	mv -f $work_dir/build/baserom/images/super.img.zst $work_dir/out/${os_type}_${device_code}_${base_rom_code}/
-    mv -f $work_dir/build/baserom/images/*.img $work_dir/out/${os_type}_${device_code}_${base_rom_code}/images/
-elif [[ ${baserom_type} == 'br' ]]; then
-    mkdir -p $work_dir/out/${os_type}_${device_code}_${base_rom_code}/images/
-    mv -f $work_dir/build/baserom/firmware-update/* $work_dir/out/${os_type}_${device_code}_${base_rom_code}/images/
-    mv -f $work_dir/build/baserom/images/super.img.zst $work_dir/out/${os_type}_${device_code}_${base_rom_code}/
-fi
-
-# generate dynamic script
-cp -rf $work_dir/bin/script2flash/META-INF $work_dir/out/${os_type}_${device_code}_${base_rom_code}/
-cp -rf $work_dir/bin/script2flash/*.bat $work_dir/out/${os_type}_${device_code}_${base_rom_code}/
-cp -rf $work_dir/bin/script2flash/*.sh $work_dir/out/${os_type}_${device_code}_${base_rom_code}/
-cp -rf $work_dir/bin/script2flash/cust.img $work_dir/out/${os_type}_${device_code}_${base_rom_code}/images/
-echo $device_f > $work_dir/out/${os_type}_${device_code}_${base_rom_code}/META-INF/Data/DeviceCode
-repack "Done"
-
-
-find out/${os_type}_${device_code}_${base_rom_code} |xargs touch
-pushd out/${os_type}_${device_code}_${base_rom_code}/ || exit
-zip -r ${os_type}_${device_code}_${base_rom_code}.zip ./*
-mv ${os_type}_${device_code}_${base_rom_code}.zip ../
-popd || exit
-hash=$(md5sum out/${os_type}_${device_code}_${base_rom_code}.zip |head -c 5)
-mv out/${os_type}_${device_code}_${base_rom_code}.zip out/${os_type}_${polyxver}_${device_code}_${base_rom_code}_${hash}_${status}.zip
-repack "Build completed"    
-repack "Output: "
-repack "$(pwd)/out/${os_type}_${polyxver}_${device_code}_${base_rom_code}_${hash}_${status}.zip"
-upload "Uploading"
-output_file="out/${os_type}_${polyxver}_${device_code}_${base_rom_code}_${hash}_${status}.zip"
-echo "${os_type}_${polyxver}_${device_code}_${base_rom_code}_${hash}_${status}.zip" > $work_dir/bin/ddevice/output_zip.txt
-
-if [[ $rom_os == "MIUI" ]];then
-    uploaddir="MIUI"
-else
-    uploaddir="HyperOS"
-fi
-
-# 1drive
-if [[ $rom_os == "MIUI" ]]; then
-    rclone -v --config="$RCLONE_CONFIG_1DRIVE" copy "$output_file" "$ONEDRIVE_REMOTE:NTBuild/${uploaddir}/${polyxver}/${device_code}/" || {
-        upload "Error uploading file to OneDrive: $FILENAME"
-        exit 1
-    }
-else
-    rclone -v --config="$RCLONE_CONFIG_1DRIVE" copy "$output_file" "$ONEDRIVE_REMOTE:NTBuild/${uploaddir}/${polyxver}/${device_code}/" || {
-        upload "Error uploading file to OneDrive: $FILENAME"
-        exit 1
-    }
-fi  
-
-upload "Clean Workflow.."
-rm -rf $work_dir/out
-rm -rf $work_dir/build
-
-upload "Build ${os_type}_${polyxver} for ${device_code} successfull!"
+upload "Cleaning workspace"
+rm -rf "$work_dir/build"
