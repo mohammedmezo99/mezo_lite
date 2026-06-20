@@ -1,0 +1,16 @@
+on property:sys.boot_completed=1
+    exec u:r:init:s0 root root -- /system_ext/xbin/resetprop ro.boot.flash.locked 1
+    exec u:r:init:s0 root root -- /system_ext/xbin/resetprop ro.boot.verifiedbootstate green
+    exec u:r:init:s0 root root -- /system_ext/xbin/resetprop ro.boot.veritymode enforcing
+    exec u:r:init:s0 root root -- /system_ext/xbin/resetprop ro.boot.vbmeta.device_state locked
+    exec u:r:init:s0 root root -- /system_ext/xbin/resetprop vendor.boot.verifiedbootstate green
+    exec u:r:init:s0 root root -- /system_ext/xbin/resetprop vendor.boot.vbmeta.device_state locked
+    exec u:r:init:s0 root root -- /system_ext/xbin/resetprop ro.boot.selinux enforcing
+    exec u:r:init:s0 root root -- /system_ext/xbin/resetprop ro.boot.vbmeta.digest "$(dd if=/dev/block/by-name/vbmeta bs=1 count=VB_SIZE 2> /dev/null | sha256sum -b)"
+    exec u:r:init:s0 root root -- /system_ext/xbin/resetprop ro.boot.vbmeta.hash_alg "sha256"
+    exec u:r:init:s0 root root -- /system_ext/xbin/resetprop ro.boot.vbmeta.avb_version "1.3"
+    exec u:r:init:s0 root root -- /system_ext/xbin/resetprop ro.boot.vbmeta.size "VB_SIZE"
+    exec u:r:init:s0 root root -- /system_ext/xbin/resetprop ro.boot.vbmeta.public_key_digest "$(dd if=/dev/block/by-name/vbmeta bs=1 skip=PK_OFFSET count=PK_SIZE 2> /dev/null | sha256sum -b)"
+    exec u:r:init:s0 root root -- /system_ext/xbin/resetprop ro.boot.vbmeta.invalidate_on_error "yes"
+    exec u:r:init:s0 root root -- /system_ext/xbin/resetprop ro.secureboot.lockstate locked
+
