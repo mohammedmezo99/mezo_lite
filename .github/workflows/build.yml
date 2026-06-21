@@ -39,7 +39,7 @@ jobs:
       - name: Clean unused packages
         run: |
           docker rmi $(docker images -q) || true
-          sudo rm -rf /usr/share/dotnet /etc/mysql /etc/php /etc/apt/sources.list.d || true
+          sudo rm -rf /usr/share/dotnet /etc/mysql /etc/php || true
           sudo apt -y purge azure-cli ghc* zulu* hhvm llvm* firefox google* dotnet* powershell mysql* php* || true
           sudo apt -y autoremove --purge || true
           sudo apt -y autoclean || true
@@ -72,58 +72,54 @@ jobs:
 
           sudo apt-get update
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends software-properties-common ca-certificates curl gnupg file git
-
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test || true
           sudo add-apt-repository -y universe || true
           sudo apt-get update
 
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             aria2 \
             jq \
-            python3 \
-            python3-pip \
+            sshpass \
             python-is-python3 \
             wget \
-            curl \
-            unzip \
-            zip \
-            p7zip-full \
-            zstd \
+            python3 \
+            python3-pip \
             lz4 \
             xz-utils \
-            bc \
-            file \
-            git \
-            openssl \
-            ca-certificates \
-            xmlstarlet \
             device-tree-compiler \
-            erofs-utils \
-            android-sdk-libsparse-utils \
-            busybox \
             zlib1g-dev \
             gcc \
-            g++ || true
+            g++ \
+            libc6 \
+            libstdc++6 \
+            dialog \
+            libgtk-3-dev \
+            busybox \
+            zip \
+            unzip \
+            p7zip-full \
+            zstd \
+            bc \
+            android-sdk-libsparse-utils
 
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends erofs-utils || true
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xmlstarlet || true
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends zipalign || true
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends aapt || true
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends rclone || curl -fsSL https://rclone.org/install.sh | sudo bash
 
-          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends aapt zipalign || true
-
-          if ! command -v aapt >/dev/null 2>&1 || ! command -v zipalign >/dev/null 2>&1; then
-            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends android-sdk-build-tools android-sdk-build-tools-common || true
-          fi
-
-          if command -v aapt >/dev/null 2>&1 && ! command -v zipalign >/dev/null 2>&1; then
-            build_tools_dir=$(dirname "$(command -v aapt)")
-            if [[ -x "${build_tools_dir}/zipalign" ]]; then
-              sudo ln -sf "${build_tools_dir}/zipalign" /usr/local/bin/zipalign
+          if ! command -v zipalign >/dev/null 2>&1; then
+            mapfile -t zipalign_candidates < <(find /usr -type f -name zipalign 2>/dev/null || true)
+            if [[ ${#zipalign_candidates[@]} -gt 0 ]]; then
+              sudo ln -sf "${zipalign_candidates[0]}" /usr/local/bin/zipalign
             fi
           fi
 
           python3 -m pip install --user --upgrade pip
-          python3 -m pip install --user ConfigObj requests
+          python3 -m pip install --user ConfigObj requests telebot setuptools
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-          for tool in aria2c jq python3 unzip zip 7z zstd lz4 xmlstarlet dtc rclone aapt zipalign; do
+          for tool in aria2c jq python3 unzip zip 7z zstd lz4 dtc rclone zipalign; do
             command -v "$tool" >/dev/null 2>&1 || {
               echo "Missing required tool: $tool"
               exit 1
