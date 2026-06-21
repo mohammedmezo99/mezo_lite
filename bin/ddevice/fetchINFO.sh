@@ -13,6 +13,10 @@ base_rom_code=$(cat "$work_dir/bin/ddevice/base_rom_code.txt")
 rom_os=$(cat "$work_dir/bin/ddevice/rom_os.txt")
 lite_version=$(cat "$work_dir/Version")
 systemtype=$(cat "$work_dir/bin/ddevice/fstype.txt")
+platform=$(printf '%s' "$base_rom_code" | sed -n 's/^\(OS[0-9]\+\.[0-9]\+\).*/\1/p')
+if [[ -z "$platform" ]]; then
+    platform="Unknown"
+fi
 
 if grep -q "ro.build.ab_update=true" build/baserom/images/vendor/build.prop; then
     echo "VAB" > "$work_dir/bin/script2flash/META-INF/Data/Structure"
@@ -28,7 +32,13 @@ fi
 
 echo "$rom_os" > "$work_dir/bin/ddevice/os_type.txt"
 echo "$AndroidVer" > "$work_dir/bin/ddevice/androidver.txt"
+echo "$AndroidVer" > "$work_dir/bin/ddevice/android_version.txt"
 echo "$sdkLevel" > "$work_dir/bin/ddevice/sdkLevel.txt"
+echo "$name" > "$work_dir/bin/ddevice/device_name.txt"
+echo "$device_code" > "$work_dir/bin/ddevice/codename.txt"
+echo "$base_rom_code" > "$work_dir/bin/ddevice/rom_version.txt"
+echo "$regionTYPE" > "$work_dir/bin/ddevice/region.txt"
+echo "$platform" > "$work_dir/bin/ddevice/platform.txt"
 
 echo "$AndroidVer" > "$work_dir/bin/script2flash/META-INF/Data/AndroidVer"
 echo "$base_rom_code" > "$work_dir/bin/script2flash/META-INF/Data/RomBased"

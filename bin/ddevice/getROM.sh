@@ -95,9 +95,11 @@ else
 fi
 
 echo $base_rom_code > $work_dir/bin/ddevice/base_rom_code.txt
+echo $base_rom_code > $work_dir/bin/ddevice/rom_version.txt
 echo $base_rom_code > $work_dir/bin/ddevice/os_code.txt
 echo $device_code > $work_dir/bin/ddevice/device_code.txt
+echo $device_code > $work_dir/bin/ddevice/codename.txt
 echo $DEVICE_TYPE > $work_dir/bin/ddevice/device_type.txt
+echo $DEVICE_TYPE > $work_dir/bin/ddevice/region.txt
 echo $ROM_OS > $work_dir/bin/ddevice/rom_os.txt
-
 

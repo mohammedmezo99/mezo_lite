@@ -1,6 +1,8 @@
+import html
 import os
 import re
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import requests
@@ -8,6 +10,7 @@ import requests
 
 ROOT = Path(__file__).resolve().parent
 TIMEOUT = 30
+RELEASE_IMAGE = ROOT / "assets" / "release" / "lite.png"
 
 PRIVATE_STAGE_MESSAGES = {
     "request_received": "📥 New DeadZone Lite build request received",
@@ -16,6 +19,35 @@ PRIVATE_STAGE_MESSAGES = {
     "upload_started": "☁️ Upload started to Google Drive",
     "success": "✅ Build completed successfully",
     "fail": "❌ Build failed",
+}
+
+REGION_MAP = {
+    "china": "ChinaStable",
+    "global": "GlobalStable",
+    "eeaglobal": "EeaStable",
+    "europe": "EeaStable",
+    "inglobal": "IndiaStable",
+    "indiaglobal": "IndiaStable",
+    "idglobal": "IndonesiaStable",
+    "indonesiaglobal": "IndonesiaStable",
+    "ruglobal": "RussiaStable",
+    "russiaglobal": "RussiaStable",
+    "twglobal": "TaiwanStable",
+    "taiwanglobal": "TaiwanStable",
+    "trglobal": "TurkeyStable",
+    "turkeyglobal": "TurkeyStable",
+    "jpglobal": "JapanStable",
+}
+
+REGION_BASE_TEXT = {
+    "GlobalStable": "Based on pure Global ROM",
+    "ChinaStable": "Based on pure China ROM",
+    "IndiaStable": "Based on pure Indian ROM",
+    "IndonesiaStable": "Based on pure Indonesian ROM",
+    "EeaStable": "Based on pure EEA ROM",
+    "RussiaStable": "Based on pure Russia ROM",
+    "TurkeyStable": "Based on pure Turkey ROM",
+    "TaiwanStable": "Based on pure Taiwan ROM",
 }
 
 
@@ -43,21 +75,8 @@ def normalize_android(android_value: str) -> str:
 
 
 def normalize_region(region_value: str) -> str:
-    region_map = {
-        "china": "ChinaStable",
-        "global": "GlobalStable",
-        "eeaglobal": "EeaStable",
-        "europe": "EeaStable",
-        "inglobal": "IndiaStable",
-        "indiaglobal": "IndiaStable",
-        "idglobal": "IdStable",
-        "ruglobal": "RuStable",
-        "twglobal": "TwStable",
-        "trglobal": "TrStable",
-        "jpglobal": "JpStable",
-    }
     key = re.sub(r"[^a-z]", "", (region_value or "").strip().lower())
-    return region_map.get(key, region_value or "Unknown")
+    return REGION_MAP.get(key, region_value or "Unknown")
 
 
 def normalize_codename(raw_codename: str) -> str:
@@ -72,23 +91,65 @@ def build_output_filename(version: str, codename: str, rom_version: str, region:
     return f"DeadZoneLite_v{safe_version}_{codename}_{safe_rom_version}_{safe_region}-{safe_android}.zip"
 
 
+def derive_platform(rom_version: str) -> str:
+    match = re.match(r"^(OS\d+\.\d+)", (rom_version or "").strip())
+    return match.group(1) if match else "Unknown"
+
+
+def derive_hyperos_major(rom_version: str) -> str:
+    match = re.match(r"^OS(\d+)", (rom_version or "").strip())
+    return f"HyperOS {match.group(1)}" if match else "HyperOS"
+
+
+def derive_os_tag(rom_version: str) -> str:
+    match = re.match(r"^OS(\d+)", (rom_version or "").strip())
+    return f"OS{match.group(1)}" if match else "OS"
+
+
+def derive_hyperos_tag(rom_version: str) -> str:
+    match = re.match(r"^OS(\d+)", (rom_version or "").strip())
+    return f"HyperOS{match.group(1)}" if match else "HyperOS"
+
+
+def derive_android_hash_tag(android_tag: str) -> str:
+    digits = re.sub(r"[^0-9]", "", android_tag or "")
+    return f"Android{digits}" if digits else "Android"
+
+
+def safe_link(value: str) -> str:
+    return html.escape((value or "").strip(), quote=True)
+
+
 def get_metadata() -> dict:
     version = read_text("Version", "0.00")
-    codename = normalize_codename(read_text("bin/ddevice/device_code.txt"))
-    rom_version = read_text("bin/ddevice/base_rom_code.txt", "Unknown")
-    region = normalize_region(read_text("bin/ddevice/device_type.txt", "Unknown"))
-    android = normalize_android(read_text("bin/ddevice/androidver.txt", ""))
+    codename_raw = read_text("bin/ddevice/codename.txt") or read_text("bin/ddevice/device_code.txt")
+    codename = normalize_codename(codename_raw)
+    rom_version = read_text("bin/ddevice/rom_version.txt") or read_text("bin/ddevice/base_rom_code.txt", "Unknown")
+    region = normalize_region(read_text("bin/ddevice/region.txt") or read_text("bin/ddevice/device_type.txt", "Unknown"))
+    android = normalize_android(read_text("bin/ddevice/android_version.txt") or read_text("bin/ddevice/androidver.txt", ""))
+    platform = read_text("bin/ddevice/platform.txt") or derive_platform(rom_version)
+    device_name = read_text("bin/ddevice/device_name.txt") or read_text("bin/ddevice/name_devices.txt", "Unknown Xiaomi Device")
     filename = read_text("bin/ddevice/output_zip.txt")
     if not filename:
         filename = build_output_filename(version, codename, rom_version, region, android)
     return {
         "version": version,
         "codename": codename,
+        "codename_lower": codename.lower(),
         "rom_version": rom_version,
         "region": region,
         "android": android,
+        "android_number": re.sub(r"[^0-9]", "", android),
+        "platform": platform,
+        "hyperos_major": derive_hyperos_major(rom_version),
+        "os_tag": derive_os_tag(rom_version),
+        "hyperos_tag": derive_hyperos_tag(rom_version),
+        "android_hash_tag": derive_android_hash_tag(android),
+        "device_name": device_name or "Unknown Xiaomi Device",
         "filename": filename,
         "drive_link": read_text("bin/ddevice/drive_link.txt"),
+        "date": datetime.now().strftime("%d/%m/%Y"),
+        "region_base_text": REGION_BASE_TEXT.get(region, "Based on pure official ROM"),
     }
 
 
@@ -123,17 +184,42 @@ def format_private_message(status: str, stage: str = "") -> str:
     return "\n".join([header, *details])
 
 
-def format_release_post() -> str:
+def format_release_caption() -> str:
     metadata = get_metadata()
+    drive_link = metadata["drive_link"].strip()
+    if not drive_link:
+        raise RuntimeError("Missing Google Drive link")
+
+    mezo_contact_link = safe_link(os.environ.get("MEZO_CONTACT_LINK", ""))
+    updates_group_link = safe_link(os.environ.get("UPDATES_GROUP_LINK", ""))
+    screenshots_group_link = safe_link(os.environ.get("SCREENSHOTS_GROUP_LINK", ""))
+    discussion_link = safe_link(os.environ.get("CHAT_GROUP_LINK", ""))
+    changelog_link = safe_link(os.environ.get("CHANGELOG_LINK") or os.environ.get("UPDATES_GROUP_LINK", ""))
+    screenshots_link = safe_link(os.environ.get("SCREENSHOTS_POST_LINK") or os.environ.get("SCREENSHOTS_GROUP_LINK", ""))
+    download_link = safe_link(drive_link)
+
     return (
-        "🎉 DeadZone Lite Build Completed\n\n"
-        f"📦 File:\n{metadata['filename']}\n\n"
-        f"📱 Device: {metadata['codename']}\n"
-        f"🧩 ROM Version: {metadata['rom_version']}\n"
-        f"🌍 Region: {metadata['region']}\n"
-        f"🤖 Android: {metadata['android']}\n\n"
-        f"☁️ Download:\n{metadata['drive_link']}\n\n"
-        "✨ Powered by DeadZone Lite"
+        f"🌟 <b>DeadZone Lite v{html.escape(metadata['version'])}</b>\n\n"
+        f"🪄 <b>{html.escape(metadata['hyperos_major'])}</b> • <b>{html.escape(metadata['rom_version'])}</b>\n"
+        f"🌍 <b>{html.escape(metadata['region'])}</b> • 🤖 <b>{html.escape(metadata['android'])}</b> • ⚙️ <b>{html.escape(metadata['platform'])}</b>\n\n"
+        f"━━━━━━━━━━━━━━\n\n"
+        f"📱 <b>Device</b>\n{html.escape(metadata['device_name'])}\n\n"
+        f"🏷️ <b>Code Name</b>\n#{html.escape(metadata['codename_lower'])}\n\n"
+        f"📅 <b>Release Date</b>\n{html.escape(metadata['date'])}\n\n"
+        f"🧬 <b>Base</b>\n{html.escape(metadata['region_base_text'])}\n\n"
+        f"🎨 <b>Style</b>\nDeadZone Lite\n\n"
+        f"👨‍💻 <b>Developer</b> <a href=\"{mezo_contact_link}\">MEZO</a>\n\n"
+        f"━━━━━━━━━━━━━━\n\n"
+        f"📝 <b>Changelog</b> <a href=\"{changelog_link}\">Here</a>\n\n"
+        f"☁️ <b>Downloads</b> <a href=\"{download_link}\">Here</a>\n\n"
+        f"🖼️ <b>Screenshots</b> <a href=\"{screenshots_link}\">Here</a>\n\n"
+        f"💬 <b>Discussion</b> <a href=\"{discussion_link}\">Here</a>\n\n"
+        f"━━━━━━━━━━━━━━\n\n"
+        f"#{html.escape(metadata['codename_lower'])} "
+        f"#{html.escape(metadata['os_tag'])} "
+        f"#{html.escape(metadata['hyperos_tag'])} "
+        f"#{html.escape(metadata['android_hash_tag'])} "
+        f"#DeadZone #DeadZoneLite #MEZO"
     )
 
 
@@ -147,24 +233,47 @@ def humanize_stage(stage: str) -> str:
         "package": "packaging",
         "setup_rclone": "rclone setup",
         "upload_drive": "Google Drive upload",
-        "release_post": "release posting",
+        "release_post": "release notification",
+        "release_notification": "release notification",
     }
     return mapping.get((stage or "").strip(), stage or "unknown")
 
 
-def send_telegram_message(chat_id: str, text: str) -> None:
+def send_telegram_message(chat_id: str, text: str, parse_mode: str | None = None) -> None:
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not bot_token:
         raise RuntimeError("Missing TELEGRAM_BOT_TOKEN")
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "disable_web_page_preview": True,
+    }
+    if parse_mode:
+        payload["parse_mode"] = parse_mode
     response = requests.post(
         f"https://api.telegram.org/bot{bot_token}/sendMessage",
-        json={
-            "chat_id": chat_id,
-            "text": text,
-            "disable_web_page_preview": True,
-        },
+        json=payload,
         timeout=TIMEOUT,
     )
+    response.raise_for_status()
+
+
+def send_telegram_photo(chat_id: str, caption: str, image_path: Path) -> None:
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    if not bot_token:
+        raise RuntimeError("Missing TELEGRAM_BOT_TOKEN")
+    with image_path.open("rb") as image_file:
+        response = requests.post(
+            f"https://api.telegram.org/bot{bot_token}/sendPhoto",
+            data={
+                "chat_id": chat_id,
+                "caption": caption,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": "true",
+            },
+            files={"photo": image_file},
+            timeout=TIMEOUT,
+        )
     response.raise_for_status()
 
 
@@ -179,7 +288,15 @@ def handle_release() -> None:
     chat_id = os.environ.get("TELEGRAM_RELEASE_GROUP_ID")
     if not chat_id:
         raise RuntimeError("Missing TELEGRAM_RELEASE_GROUP_ID")
-    send_telegram_message(chat_id, format_release_post())
+    caption = format_release_caption()
+    if RELEASE_IMAGE.is_file():
+        try:
+            send_telegram_photo(chat_id, caption, RELEASE_IMAGE)
+            return
+        except Exception:
+            send_telegram_message(chat_id, caption, parse_mode="HTML")
+            return
+    send_telegram_message(chat_id, caption, parse_mode="HTML")
 
 
 def usage() -> str:

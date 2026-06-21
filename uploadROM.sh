@@ -16,11 +16,11 @@ normalize_region() {
         global) echo "GlobalStable" ;;
         eeaglobal) echo "EeaStable" ;;
         inglobal) echo "IndiaStable" ;;
-        idglobal) echo "IdStable" ;;
-        ruglobal) echo "RuStable" ;;
-        twglobal) echo "TwStable" ;;
-        trglobal) echo "TrStable" ;;
-        jpglobal) echo "JpStable" ;;
+        idglobal) echo "IndonesiaStable" ;;
+        ruglobal) echo "RussiaStable" ;;
+        twglobal) echo "TaiwanStable" ;;
+        trglobal) echo "TurkeyStable" ;;
+        jpglobal) echo "JapanStable" ;;
         *) echo "$1" ;;
     esac
 }
