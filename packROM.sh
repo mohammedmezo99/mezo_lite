@@ -101,6 +101,30 @@ else
     exit 1
 fi
 
+package_root="$work_dir/out/package"
+package_images_dir="$package_root/images"
+rm -rf "$package_root"
+mkdir -p "$package_images_dir"
+
+repack "Preparing flash package"
+cp -rf "$work_dir/bin/script2flash/META-INF" "$package_root/"
+cp -rf "$work_dir/bin/script2flash/"*.bat "$package_root/" 2>/dev/null || true
+cp -rf "$work_dir/bin/script2flash/"*.sh "$package_root/" 2>/dev/null || true
+
+if [[ -f "$work_dir/bin/script2flash/cust.img" ]]; then
+    cp -f "$work_dir/bin/script2flash/cust.img" "$package_images_dir/"
+fi
+
+cp -f "$work_dir/build/baserom/images/super.img" "$package_root/"
+
+mkdir -p "$work_dir/out"
+rm -f "$work_dir/out/package.zip"
+(
+    cd "$package_root"
+    zip -qr "$work_dir/out/package.zip" ./*
+)
+repack "Created package archive: out/package.zip"
+
 for pname in ${super_list}; do
     rm -rf "$work_dir/build/baserom/images/${pname}.img" 2>/dev/null
 done
