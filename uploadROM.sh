@@ -62,13 +62,12 @@ remote_path="${remote_name}:${remote_dir}"
 upload "Uploading DeadZone Lite to Google Drive"
 rclone --config="$work_dir/rclone.conf" copyto "$output_file" "${remote_path}/${final_name}" > /dev/null 2>&1
 
-file_id=$(rclone --config="$work_dir/rclone.conf" lsjson "${remote_path}" | jq -r --arg name "$final_name" '.[] | select(.Name == $name) | .ID' | head -n 1)
-if [[ -z "$file_id" || "$file_id" == "null" ]]; then
-    echo "[ERROR] - Uploaded file ID could not be resolved"
+drive_link=$(rclone --config="$work_dir/rclone.conf" link "${remote_path}/${final_name}" 2>/dev/null | tail -n 1 | tr -d '\r')
+if [[ -z "$drive_link" ]]; then
+    echo "[ERROR] - Public Google Drive link could not be created"
     exit 1
 fi
 
-drive_link="https://drive.google.com/file/d/${file_id}/view?usp=sharing"
 echo "$drive_link" > "$work_dir/bin/ddevice/drive_link.txt"
 
 upload "Cleaning workspace"

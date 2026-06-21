@@ -79,8 +79,56 @@ def normalize_region(region_value: str) -> str:
     return REGION_MAP.get(key, region_value or "Unknown")
 
 
+def clean_codename(raw_codename: str) -> str:
+    value = (raw_codename or "").strip().lower()
+    if "|" in value:
+        value = value.split("|", 1)[0].strip()
+    value = re.sub(r"[_-]+", "", value)
+    for suffix in (
+        "globalstable",
+        "chinastable",
+        "indiastable",
+        "indonesiastable",
+        "eeastable",
+        "europestable",
+        "russiastable",
+        "turkeystable",
+        "taiwanstable",
+        "japanstable",
+        "global",
+        "china",
+        "india",
+        "indonesia",
+        "eea",
+        "europe",
+        "russia",
+        "turkey",
+        "taiwan",
+        "japan",
+        "stable",
+    ):
+        if value.endswith(suffix):
+            value = value[: -len(suffix)]
+            break
+    value = re.sub(r"[^a-z0-9]+", "", value)
+    return value or "unknown"
+
+
 def normalize_codename(raw_codename: str) -> str:
-    return re.sub(r"[^A-Za-z0-9_]+", "", (raw_codename or "").strip()).upper() or "UNKNOWN"
+    return clean_codename(raw_codename).upper()
+
+
+def clean_device_name(raw_name: str) -> str:
+    parts = [part.strip() for part in (raw_name or "").split("|") if part.strip()]
+    unique_parts: list[str] = []
+    for part in parts:
+        if part not in unique_parts:
+            unique_parts.append(part)
+    if not unique_parts:
+        return "Unknown Xiaomi Device"
+    five_g = [part for part in unique_parts if "5G" in part]
+    candidates = five_g or unique_parts
+    return max(candidates, key=lambda item: (len(item), item))
 
 
 def build_output_filename(version: str, codename: str, rom_version: str, region: str, android_tag: str) -> str:
@@ -128,7 +176,7 @@ def get_metadata() -> dict:
     region = normalize_region(read_text("bin/ddevice/region.txt") or read_text("bin/ddevice/device_type.txt", "Unknown"))
     android = normalize_android(read_text("bin/ddevice/android_version.txt") or read_text("bin/ddevice/androidver.txt", ""))
     platform = read_text("bin/ddevice/platform.txt") or derive_platform(rom_version)
-    device_name = read_text("bin/ddevice/device_name.txt") or read_text("bin/ddevice/name_devices.txt", "Unknown Xiaomi Device")
+    device_name = clean_device_name(read_text("bin/ddevice/device_name.txt") or read_text("bin/ddevice/name_devices.txt", "Unknown Xiaomi Device"))
     filename = read_text("bin/ddevice/output_zip.txt")
     if not filename:
         filename = build_output_filename(version, codename, rom_version, region, android)

@@ -3,6 +3,25 @@
 baserom="$1"
 work_dir=$(pwd)
 source $work_dir/functions.sh
+
+clean_codename() {
+    local raw="$1"
+    local lower
+    lower=$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')
+    lower=${lower%%|*}
+    lower=${lower%%-*}
+    lower=${lower%%_*}
+
+    for suffix in globalstable chinastable indiastable indonesiastable eeastable europestable russiastable turkeystable taiwanstable japanstable global china india indonesia eea europe russia turkey taiwan japan stable; do
+        if [[ "$lower" == *"$suffix" ]]; then
+            lower="${lower%$suffix}"
+        fi
+    done
+
+    lower=$(printf '%s' "$lower" | sed 's/[^a-z0-9]//g')
+    printf '%s\n' "$lower"
+}
+
 # Check whether it is a local package or a link
 if [ ! -f "${baserom}" ] && [ "$(echo $baserom |grep http)" != "" ]; then
     info "Download link detected, starting a download..."
@@ -24,6 +43,8 @@ else
     exit
 fi
 
+rom_filename=$(basename "$baserom")
+rom_codename=$(printf '%s' "$rom_filename" | sed -n 's/^\([^-][^-]*\)-ota_full-.*/\1/p')
 
 # Get ROM Info
 if [ "$(echo $baserom |grep miui_)" != "" ]; then
@@ -54,7 +75,19 @@ else
     base_rom_code="Unknown"
 fi
 
+if [[ -n "$rom_codename" ]]; then
+    cleaned_rom_codename=$(clean_codename "$rom_codename")
+    if [[ -n "$cleaned_rom_codename" ]]; then
+        device_f="$cleaned_rom_codename"
+        device_code=$(printf '%s' "$cleaned_rom_codename" | tr '[:lower:]' '[:upper:]')
+    fi
+fi
+
 device_f=$(echo $device_code | sed 's/\(Global\|EEAGlobal\|INGlobal\|IDGlobal\|RUGlobal\|TWGlobal\|TRGlobal\|JPGlobal\)$//' | tr '[:upper:]' '[:lower:]')
+device_f=$(clean_codename "$device_f")
+if [[ -n "$device_f" ]]; then
+    device_code=$(printf '%s' "$device_f" | tr '[:lower:]' '[:upper:]')
+fi
 
 # Determine Device Type
 info "Get Device Type"
@@ -98,8 +131,7 @@ echo $base_rom_code > $work_dir/bin/ddevice/base_rom_code.txt
 echo $base_rom_code > $work_dir/bin/ddevice/rom_version.txt
 echo $base_rom_code > $work_dir/bin/ddevice/os_code.txt
 echo $device_code > $work_dir/bin/ddevice/device_code.txt
-echo $device_code > $work_dir/bin/ddevice/codename.txt
+echo $device_f > $work_dir/bin/ddevice/codename.txt
 echo $DEVICE_TYPE > $work_dir/bin/ddevice/device_type.txt
 echo $DEVICE_TYPE > $work_dir/bin/ddevice/region.txt
 echo $ROM_OS > $work_dir/bin/ddevice/rom_os.txt
-

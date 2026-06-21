@@ -4,11 +4,45 @@ set -euo pipefail
 work_dir=$(pwd)
 source "$work_dir/functions.sh"
 
+clean_device_name() {
+    local raw="$1"
+    local best=""
+    local part=""
+    local seen="|"
+
+    while IFS= read -r part; do
+        part=$(printf '%s' "$part" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        [[ -z "$part" ]] && continue
+        [[ "$seen" == *"|$part|"* ]] && continue
+        seen="${seen}${part}|"
+
+        if [[ -z "$best" ]]; then
+            best="$part"
+            continue
+        fi
+
+        if [[ "$part" == *"5G"* && "$best" != *"5G"* ]]; then
+            best="$part"
+            continue
+        fi
+
+        if [[ ${#part} -gt ${#best} ]]; then
+            best="$part"
+        fi
+    done < <(printf '%s\n' "$raw" | tr '|' '\n')
+
+    if [[ -z "$best" ]]; then
+        best="Unknown Xiaomi Device"
+    fi
+
+    printf '%s\n' "$best"
+}
+
 regionTYPE=$(cat "$work_dir/bin/ddevice/device_type.txt")
 AndroidVer=$(grep "ro.system.build.version.release" "$work_dir/build/baserom/images/system/system/build.prop" | awk 'NR==1' | cut -d '=' -f 2)
 sdkLevel=$(grep "ro.system.build.version.sdk" "$work_dir/build/baserom/images/system/system/build.prop" | awk 'NR==1' | cut -d '=' -f 2)
 device_code=$(cat "$work_dir/bin/ddevice/device_code.txt")
-name=$(cat "$work_dir/bin/ddevice/name_devices.txt")
+name=$(clean_device_name "$(cat "$work_dir/bin/ddevice/name_devices.txt")")
 base_rom_code=$(cat "$work_dir/bin/ddevice/base_rom_code.txt")
 rom_os=$(cat "$work_dir/bin/ddevice/rom_os.txt")
 lite_version=$(cat "$work_dir/Version")
@@ -35,7 +69,6 @@ echo "$AndroidVer" > "$work_dir/bin/ddevice/androidver.txt"
 echo "$AndroidVer" > "$work_dir/bin/ddevice/android_version.txt"
 echo "$sdkLevel" > "$work_dir/bin/ddevice/sdkLevel.txt"
 echo "$name" > "$work_dir/bin/ddevice/device_name.txt"
-echo "$device_code" > "$work_dir/bin/ddevice/codename.txt"
 echo "$base_rom_code" > "$work_dir/bin/ddevice/rom_version.txt"
 echo "$regionTYPE" > "$work_dir/bin/ddevice/region.txt"
 echo "$platform" > "$work_dir/bin/ddevice/platform.txt"
