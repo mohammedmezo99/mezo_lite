@@ -68,31 +68,67 @@ jobs:
 
       - name: Install dependencies
         run: |
+          set -euo pipefail
+
           sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends software-properties-common ca-certificates curl gnupg file git
+
+          sudo add-apt-repository -y universe || true
+          sudo apt-get update
+
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
             aria2 \
             jq \
-            rclone \
-            wget \
             python3 \
             python3-pip \
-            lz4 \
-            xz-utils \
-            device-tree-compiler \
-            zlib1g-dev \
-            gcc \
-            g++ \
-            busybox \
-            zip \
+            python-is-python3 \
+            wget \
+            curl \
             unzip \
+            zip \
             p7zip-full \
             zstd \
+            lz4 \
+            xz-utils \
             bc \
+            file \
+            git \
+            openssl \
+            ca-certificates \
             xmlstarlet \
+            device-tree-compiler \
             erofs-utils \
-            aapt \
-            zipalign
-          sudo pip3 install ConfigObj requests
+            android-sdk-libsparse-utils \
+            busybox \
+            zlib1g-dev \
+            gcc \
+            g++ || true
+
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends rclone || curl -fsSL https://rclone.org/install.sh | sudo bash
+
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends aapt zipalign || true
+
+          if ! command -v aapt >/dev/null 2>&1 || ! command -v zipalign >/dev/null 2>&1; then
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends android-sdk-build-tools android-sdk-build-tools-common || true
+          fi
+
+          if command -v aapt >/dev/null 2>&1 && ! command -v zipalign >/dev/null 2>&1; then
+            build_tools_dir=$(dirname "$(command -v aapt)")
+            if [[ -x "${build_tools_dir}/zipalign" ]]; then
+              sudo ln -sf "${build_tools_dir}/zipalign" /usr/local/bin/zipalign
+            fi
+          fi
+
+          python3 -m pip install --user --upgrade pip
+          python3 -m pip install --user ConfigObj requests
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+          for tool in aria2c jq python3 unzip zip 7z zstd lz4 xmlstarlet dtc rclone aapt zipalign; do
+            command -v "$tool" >/dev/null 2>&1 || {
+              echo "Missing required tool: $tool"
+              exit 1
+            }
+          done
 
       - name: Grant execute permissions
         run: chmod -R 777 .

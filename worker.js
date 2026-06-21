@@ -1,40 +1,4 @@
-const PUBLIC_ACK_MESSAGE = `✅ ROM Link Received Successfully
-
-Your ROM link has been sent to MEZO for processing.
-
-⏳ Estimated build time: 40–60 minutes
-Please wait until the process is completed.
-
-━━━━━━━━━━━━━━
-
- DeadZone Lite is now being prepared for you.
-
-Looking for something more powerful?
-
- DeadZone GamingPlus
- DeadZone Legend
- DeadZone Ninja
-
-These premium systems include more advanced features, stronger optimization, and a more exclusive experience.
-
- Premium ROMs are paid systems.
- For details, contact MEZO:
-\${MEZO_CONTACT_LINK}
-
-━━━━━━━━━━━━━━
-
- Updates Channel
-\${UPDATES_GROUP_LINK}
-
- Screenshots Channel
-\${SCREENSHOTS_GROUP_LINK}
-
- Community Chat
-\${CHAT_GROUP_LINK}
-
-✨ Thank you for choosing DeadZone.`;
-
-const INVALID_USAGE_MESSAGE = "⚠️ Usage:\n`/mezo <ROM_LINK>`\n\nPlease send a valid ROM download link.";
+const INVALID_USAGE_MESSAGE = "⚠️ <b>Usage:</b>\n<code>/mezo &lt;ROM_LINK&gt;</code>\n\nPlease send a valid ROM download link.";
 const DISPATCH_FAILURE_MESSAGE = "❌ Failed to submit your request. Please contact MEZO.";
 const HEALTH_RESPONSE = "MEZO Lite Telegram webhook is running.";
 
@@ -76,18 +40,18 @@ export default {
       }
 
       if (!parsed.romLink) {
-        await sendTelegramMessage(env, chatId, INVALID_USAGE_MESSAGE, message.message_id);
+        await sendTelegramMessage(env, chatId, INVALID_USAGE_MESSAGE, message.message_id, "HTML");
         return new Response("OK", { status: 200 });
       }
 
-      await sendTelegramMessage(env, chatId, renderPublicAck(env), message.message_id);
+      await sendTelegramMessage(env, chatId, renderPublicAckHtml(env), message.message_id, "HTML");
 
       const builderName = getBuilderName(message.from);
       const builderId = String(message.from?.id ?? "");
       const dispatched = await dispatchWorkflow(env, parsed.romLink, builderName, builderId);
 
       if (!dispatched) {
-        await sendTelegramMessage(env, chatId, DISPATCH_FAILURE_MESSAGE, message.message_id);
+        await sendTelegramMessage(env, chatId, DISPATCH_FAILURE_MESSAGE, message.message_id, "HTML");
       }
 
       return new Response("OK", { status: 200 });
@@ -137,22 +101,62 @@ function getBuilderName(from) {
   return "Telegram User";
 }
 
-function renderPublicAck(env) {
-  return PUBLIC_ACK_MESSAGE
-    .replace("${MEZO_CONTACT_LINK}", env.MEZO_CONTACT_LINK ?? "")
-    .replace("${UPDATES_GROUP_LINK}", env.UPDATES_GROUP_LINK ?? "")
-    .replace("${SCREENSHOTS_GROUP_LINK}", env.SCREENSHOTS_GROUP_LINK ?? "")
-    .replace("${CHAT_GROUP_LINK}", env.CHAT_GROUP_LINK ?? "");
+function renderPublicAckHtml(env) {
+  const mezoContactLink = toSafeTelegramLink(env.MEZO_CONTACT_LINK);
+  const updatesGroupLink = toSafeTelegramLink(env.UPDATES_GROUP_LINK);
+  const screenshotsGroupLink = toSafeTelegramLink(env.SCREENSHOTS_GROUP_LINK);
+  const chatGroupLink = toSafeTelegramLink(env.CHAT_GROUP_LINK);
+
+  return (
+    `✅ <b>ROM Link Received Successfully</b>\n\n` +
+    `📨 Your ROM link has been sent to <b>MEZO</b> for processing.\n\n` +
+    `⏳ <b>Estimated build time:</b> 40–60 minutes\n` +
+    `Please wait until the process is completed.\n\n` +
+    `━━━━━━━━━━━━━━\n\n` +
+    `🚀 <b>DeadZone Lite</b> is now being prepared for you.\n\n` +
+    `✨ Looking for something more powerful?\n\n` +
+    `🎮 <b>DeadZone GamingPlus</b>\n` +
+    `👑 <b>DeadZone Legend</b>\n` +
+    `⚔️ <b>DeadZone Ninja</b>\n\n` +
+    `⚡ These premium systems include more advanced features, stronger optimization, and a more exclusive experience.\n\n` +
+    `💎 <b>Premium ROMs are paid systems.</b>\n` +
+    `For details, contact <a href="${mezoContactLink}">MEZO</a>.\n\n` +
+    `━━━━━━━━━━━━━━\n\n` +
+    `📢 <a href="${updatesGroupLink}">Updates Channel</a>\n\n` +
+    `🖼️ <a href="${screenshotsGroupLink}">Screenshots Channel</a>\n\n` +
+    `💬 <a href="${chatGroupLink}">Community Chat</a>\n\n` +
+    `✨ Thank you for choosing <b>DeadZone</b>.`
+  );
 }
 
-async function sendTelegramMessage(env, chatId, text, replyToMessageId) {
+function toSafeTelegramLink(value) {
+  try {
+    const parsed = new URL(value ?? "");
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return escapeHtmlAttribute(parsed.toString());
+    }
+  } catch {
+    return "#";
+  }
+  return "#";
+}
+
+function escapeHtmlAttribute(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+async function sendTelegramMessage(env, chatId, text, replyToMessageId, parseMode = "HTML") {
   const response = await fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: "POST",
     headers: { "content-type": "application/json; charset=UTF-8" },
     body: JSON.stringify({
       chat_id: chatId,
       text,
-      parse_mode: "Markdown",
+      parse_mode: parseMode,
       disable_web_page_preview: true,
       ...(replyToMessageId ? { reply_to_message_id: replyToMessageId } : {}),
     }),
