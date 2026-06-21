@@ -39,8 +39,38 @@ clean_device_name() {
 }
 
 regionTYPE=$(cat "$work_dir/bin/ddevice/device_type.txt")
-AndroidVer=$(grep "ro.system.build.version.release" "$work_dir/build/baserom/images/system/system/build.prop" | awk 'NR==1' | cut -d '=' -f 2)
-sdkLevel=$(grep "ro.system.build.version.sdk" "$work_dir/build/baserom/images/system/system/build.prop" | awk 'NR==1' | cut -d '=' -f 2)
+get_prop_value() {
+    local prop_key="$1"
+    shift
+    local checked=()
+    local prop_file=""
+    local prop_value=""
+
+    for prop_file in "$@"; do
+        checked+=("$prop_file")
+        if [[ -f "$prop_file" ]]; then
+            prop_value=$(grep -m1 "^${prop_key}=" "$prop_file" | cut -d '=' -f 2- || true)
+            if [[ -n "$prop_value" ]]; then
+                printf '%s\n' "$prop_value"
+                return 0
+            fi
+        fi
+    done
+
+    error "Unable to read ${prop_key}. Checked: ${checked[*]}"
+    return 1
+}
+
+prop_candidates=(
+    "$work_dir/build/baserom/images/system/system/build.prop"
+    "$work_dir/build/baserom/images/system/build.prop"
+    "$work_dir/build/baserom/images/product/etc/build.prop"
+    "$work_dir/build/baserom/images/product/build.prop"
+    "$work_dir/build/baserom/images/vendor/build.prop"
+)
+
+AndroidVer=$(get_prop_value "ro.system.build.version.release" "${prop_candidates[@]}")
+sdkLevel=$(get_prop_value "ro.system.build.version.sdk" "${prop_candidates[@]}")
 device_code=$(cat "$work_dir/bin/ddevice/device_code.txt")
 name=$(clean_device_name "$(cat "$work_dir/bin/ddevice/name_devices.txt")")
 base_rom_code=$(cat "$work_dir/bin/ddevice/base_rom_code.txt")

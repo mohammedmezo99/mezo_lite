@@ -9,6 +9,11 @@ raw_codename=$(< "$work_dir/bin/ddevice/device_code.txt")
 rom_version=$(< "$work_dir/bin/ddevice/base_rom_code.txt")
 android_version=$(< "$work_dir/bin/ddevice/androidver.txt")
 region_type=$(< "$work_dir/bin/ddevice/device_type.txt")
+baserom_type=$(< "$work_dir/bin/ddevice/romtype.txt")
+device_f=$(< "$work_dir/bin/ddevice/device_f.txt")
+super_img_path="$work_dir/build/baserom/images/super.img"
+super_img_zst_path="$work_dir/build/baserom/images/super.img.zst"
+final_root="$work_dir/out/final_package"
 
 normalize_region() {
     case "${1,,}" in
@@ -42,14 +47,98 @@ if [[ "${1:-}" == "setup" ]]; then
     exit 0
 fi
 
-source_file=$(find "$work_dir/out" -maxdepth 1 -type f -name "*.zip" | head -n 1)
-if [[ -z "$source_file" ]]; then
-    echo "[ERROR] - No packaged ROM archive found in out/"
+if [[ ! -f "$super_img_path" ]]; then
+    echo "[ERROR] - Missing super.img at build/baserom/images/super.img"
     exit 1
 fi
 
-mv -f "$source_file" "$output_file"
+mkdir -p "$work_dir/out"
+rm -rf "$final_root"
+rm -f "$output_file"
+mkdir -p "$final_root/images"
+
+upload "Compressing super.img"
+zstd --rm -f "$super_img_path" -o "$super_img_zst_path" > /dev/null 2>&1
+if [[ ! -f "$super_img_zst_path" ]]; then
+    echo "[ERROR] - Failed to create super.img.zst"
+    exit 1
+fi
+
+case "$baserom_type" in
+    payload)
+        cp -f "$super_img_zst_path" "$final_root/"
+        find "$work_dir/build/baserom/images" -maxdepth 1 -type f -name "*.img" -exec cp -f {} "$final_root/images/" \;
+        ;;
+    br)
+        if [[ ! -d "$work_dir/build/baserom/firmware-update" ]]; then
+            echo "[ERROR] - Missing firmware-update directory for br ROM packaging"
+            exit 1
+        fi
+        cp -f "$super_img_zst_path" "$final_root/"
+        find "$work_dir/build/baserom/firmware-update" -maxdepth 1 -type f -exec cp -f {} "$final_root/images/" \;
+        ;;
+    *)
+        echo "[ERROR] - Unsupported rom type: $baserom_type"
+        exit 1
+        ;;
+esac
+
+cp -rf "$work_dir/bin/script2flash/META-INF" "$final_root/"
+cp -f "$work_dir/bin/script2flash/"*.bat "$final_root/" 2>/dev/null || true
+cp -f "$work_dir/bin/script2flash/"*.sh "$final_root/" 2>/dev/null || true
+
+if [[ -f "$work_dir/bin/script2flash/cust.img" ]]; then
+    cp -f "$work_dir/bin/script2flash/cust.img" "$final_root/images/"
+fi
+
+printf '%s\n' "$device_f" > "$final_root/META-INF/Data/DeviceCode"
+printf '%s\n' "$region_type" > "$final_root/META-INF/Data/Region"
+
+if [[ ! -s "$final_root/META-INF/Data/DeviceCode" ]]; then
+    echo "[ERROR] - META-INF/Data/DeviceCode is empty"
+    exit 1
+fi
+
+find "$final_root" -exec touch -t 200901010000.00 {} + 2>/dev/null || true
+(
+    cd "$final_root"
+    zip -qr "$output_file" ./*
+)
+
+if [[ ! -f "$output_file" ]]; then
+    echo "[ERROR] - Final ZIP was not created"
+    exit 1
+fi
+
+zip_listing=$(unzip -Z1 "$output_file")
+if printf '%s\n' "$zip_listing" | grep -Eq '(^package/|^final_package/|(^|/)package\.zip$)'; then
+    echo "[ERROR] - Final ZIP contains an unexpected parent folder or stale package.zip"
+    exit 1
+fi
+
+if ! printf '%s\n' "$zip_listing" | grep -qx 'META-INF/'; then
+    echo "[ERROR] - Final ZIP is missing META-INF/ at the archive root"
+    exit 1
+fi
+if ! printf '%s\n' "$zip_listing" | grep -qx 'super.img.zst'; then
+    echo "[ERROR] - Final ZIP is missing super.img.zst at the archive root"
+    exit 1
+fi
+if ! printf '%s\n' "$zip_listing" | grep -q '^images/'; then
+    echo "[ERROR] - Final ZIP is missing images/ content"
+    exit 1
+fi
+if ! printf '%s\n' "$zip_listing" | grep -qx 'Windows_FastbootInstall.bat'; then
+    echo "[ERROR] - Final ZIP is missing Windows_FastbootInstall.bat"
+    exit 1
+fi
+
 echo "$final_name" > "$work_dir/bin/ddevice/output_zip.txt"
+
+if [[ "${DEADZONE_DRY_RUN:-0}" == "1" ]]; then
+    upload "Dry-run packaging complete"
+    exit 0
+fi
 
 remote_name="${RCLONE_REMOTE_NAME:-gdrive}"
 remote_dir="${RCLONE_UPLOAD_DIR:-}"

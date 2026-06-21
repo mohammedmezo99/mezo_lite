@@ -22,6 +22,40 @@ clean_codename() {
     printf '%s\n' "$lower"
 }
 
+transform_region_display_code() {
+    local raw="$1"
+    echo "$raw" | awk -F '_' '{
+        if (NF == 1) {
+            print toupper($1)
+        } else if (NF == 2) {
+            print toupper($1) toupper(substr($2, 1, 1)) substr($2, 2)
+        } else if (NF >= 3) {
+            printf toupper($1)
+            for (i = 2; i <= NF; i++) {
+                printf toupper(substr($i, 1, 1)) substr($i, 2)
+            }
+            printf "\n"
+        }
+    }'
+}
+
+detect_device_type() {
+    local code_lower
+    code_lower=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+
+    case "$code_lower" in
+        *eea_global*|*eeaglobal*|*eea*) echo "EEAGlobal" ;;
+        *in_global*|*inglobal*|*india*) echo "INGlobal" ;;
+        *id_global*|*idglobal*|*indonesia*) echo "IDGlobal" ;;
+        *ru_global*|*ruglobal*|*russia*) echo "RUGlobal" ;;
+        *tw_global*|*twglobal*|*taiwan*) echo "TWGlobal" ;;
+        *tr_global*|*trglobal*|*turkey*) echo "TRGlobal" ;;
+        *jp_global*|*jpglobal*|*japan*) echo "JPGlobal" ;;
+        *global*) echo "Global" ;;
+        *) echo "China" ;;
+    esac
+}
+
 # Check whether it is a local package or a link
 if [ ! -f "${baserom}" ] && [ "$(echo $baserom |grep http)" != "" ]; then
     info "Download link detected, starting a download..."
@@ -45,71 +79,55 @@ fi
 
 rom_filename=$(basename "$baserom")
 rom_codename=$(printf '%s' "$rom_filename" | sed -n 's/^\([^-][^-]*\)-ota_full-.*/\1/p')
+region_source=""
 
 # Get ROM Info
 if [ "$(echo $baserom |grep miui_)" != "" ]; then
     device_code=$(basename $baserom |cut -d '_' -f 2)
     base_rom_code=$(echo "$baserom" | awk -F'_' '{print $3}')
+    region_source="$device_code"
 elif [ "$(echo $baserom |grep xiaomi.eu_)" != "" ]; then
     device_code=$(basename $baserom |cut -d '_' -f 3)
     base_rom_code=$(echo "$baserom" | awk -F'_' '{print $3}')
+    region_source="$device_code"
 elif [ "$(echo $baserom | grep -E '.*-ota_full-.*')" != "" ]; then
     device_code=$(basename $baserom | cut -d '-' -f 1)
     base_rom_code=$(basename $baserom | cut -d '-' -f 3)
-
-    # Transform device_code
-    device_code=$(echo $device_code | awk -F '_' '{
-        if (NF == 1) {
-            # If one part, e.g., shennong
-            print toupper($1)
-        } else if (NF == 2) {
-            # If two parts, e.g., tapas_global
-            print toupper($1) toupper(substr($2, 1, 1)) substr($2, 2)
-        } else if (NF == 3) {
-            # If three parts, e.g., houji_tw_global
-            printf toupper($1) toupper($2) toupper(substr($3, 1, 1)) substr($3, 2)
-        }
-    }')
+    region_source="$device_code"
+    device_code=$(transform_region_display_code "$device_code")
 else
     device_code="YourDevice"
     base_rom_code="Unknown"
+    region_source="$device_code"
 fi
 
+if [[ -z "$region_source" && -n "$rom_codename" ]]; then
+    region_source="$rom_codename"
+fi
+
+raw_region_code="$device_code"
 if [[ -n "$rom_codename" ]]; then
-    cleaned_rom_codename=$(clean_codename "$rom_codename")
-    if [[ -n "$cleaned_rom_codename" ]]; then
-        device_f="$cleaned_rom_codename"
-        device_code=$(printf '%s' "$cleaned_rom_codename" | tr '[:lower:]' '[:upper:]')
+    transformed_rom_code=$(transform_region_display_code "$rom_codename")
+    if [[ -n "$transformed_rom_code" ]]; then
+        raw_region_code="$transformed_rom_code"
     fi
-fi
-
-device_f=$(echo $device_code | sed 's/\(Global\|EEAGlobal\|INGlobal\|IDGlobal\|RUGlobal\|TWGlobal\|TRGlobal\|JPGlobal\)$//' | tr '[:upper:]' '[:lower:]')
-device_f=$(clean_codename "$device_f")
-if [[ -n "$device_f" ]]; then
-    device_code=$(printf '%s' "$device_f" | tr '[:lower:]' '[:upper:]')
 fi
 
 # Determine Device Type
 info "Get Device Type"
-if echo "$device_code" | grep -q 'EEAGlobal'; then
-    DEVICE_TYPE="EEAGlobal"
-elif echo "$device_code" | grep -q 'INGlobal'; then
-    DEVICE_TYPE="INGlobal"
-elif echo "$device_code" | grep -q 'IDGlobal'; then
-    DEVICE_TYPE="IDGlobal"
-elif echo "$device_code" | grep -q 'RUGlobal'; then
-    DEVICE_TYPE="RUGlobal"
-elif echo "$device_code" | grep -q 'JPGlobal'; then
-    DEVICE_TYPE="JPGlobal"
-elif echo "$device_code" | grep -q 'Global'; then
-    DEVICE_TYPE="Global"
-elif echo "$device_code" | grep -q 'TWGlobal'; then
-    DEVICE_TYPE="TWGlobal"
-elif echo "$device_code" | grep -q 'TRGlobal'; then
-    DEVICE_TYPE="TRGlobal"
-else
-    DEVICE_TYPE="China"
+DEVICE_TYPE=$(detect_device_type "$raw_region_code")
+
+device_f=$(clean_codename "${rom_codename:-$region_source}")
+if [[ -z "$device_f" ]]; then
+    device_f=$(clean_codename "$region_source")
 fi
+
+if [[ -z "$device_f" ]]; then
+    error "Unable to determine clean device codename from $baserom"
+    exit 1
+fi
+
+device_code="$raw_region_code"
 
 #Check MIUI or Hyper
 if echo "$base_rom_code" | grep -q "OS1"; then
@@ -131,6 +149,7 @@ echo $base_rom_code > $work_dir/bin/ddevice/base_rom_code.txt
 echo $base_rom_code > $work_dir/bin/ddevice/rom_version.txt
 echo $base_rom_code > $work_dir/bin/ddevice/os_code.txt
 echo $device_code > $work_dir/bin/ddevice/device_code.txt
+echo $device_f > $work_dir/bin/ddevice/device_f.txt
 echo $device_f > $work_dir/bin/ddevice/codename.txt
 echo $DEVICE_TYPE > $work_dir/bin/ddevice/device_type.txt
 echo $DEVICE_TYPE > $work_dir/bin/ddevice/region.txt

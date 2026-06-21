@@ -19,6 +19,7 @@ else
 fi
 
 check unzip aria2c 7z zip java zipalign python3 zstd bc
+check jq brotli simg2img lpmake make_ext4fs mkfs.erofs payload-extract
 
 rm -rf "$work_dir/out"
 rm -rf "$work_dir/build"
@@ -55,6 +56,17 @@ find . -type d -name 'miui_*' | xargs rm -rf
 unpack "Files cleaned up."
 mkdir -p build/baserom/images/
 
+require_matching_files() {
+    local base_dir="$1"
+    local pattern="$2"
+    local message="$3"
+
+    if ! find "$base_dir" -maxdepth 1 -type f -name "$pattern" | grep -q .; then
+        error "$message"
+        exit 1
+    fi
+}
+
 if [[ ${baserom_type:-} == "payload" ]]; then
     unpack "Extracting payload.bin"
     unzip "${baserom}" payload.bin -d build/baserom >/dev/null 2>&1 || error "Extracting payload.bin failed"
@@ -79,6 +91,7 @@ fi
 if [[ ${baserom_type:-} == "payload" ]]; then
     unpack "Unpacking payload.bin"
     payload-extract extract -o build/baserom/images/ build/baserom/payload.bin >/dev/null 2>&1 || error "Unpacking payload.bin failed"
+    require_matching_files "$work_dir/build/baserom/images" "*.img" "Payload extraction produced no .img files"
 elif [[ ${baserom_type:-} == "br" ]]; then
     super_list=$(grep "add " build/baserom/dynamic_partitions_op_list | awk '{ print $2 }')
     unpack "Converting Brotli partitions"
@@ -87,6 +100,7 @@ elif [[ ${baserom_type:-} == "br" ]]; then
         python3 "$work_dir/bin/Linux/x86_64/sdat2img.py" "build/baserom/${brotlipart}.transfer.list" "build/baserom/${brotlipart}.new.dat" "build/baserom/images/${brotlipart}.img" >/dev/null 2>&1
         rm -rf "build/baserom/${brotlipart}.new.dat" "build/baserom/${brotlipart}.new.dat.br" "build/baserom/${brotlipart}.transfer.list" "build/baserom/${brotlipart}.patch.dat"
     done
+    require_matching_files "$work_dir/build/baserom/images" "*.img" "Brotli extraction produced no .img files"
 elif [[ ${is_base_rom_eu:-false} == true ]]; then
     unpack "Unpacking super.img"
     super_list=$(python3 bin/lpunpack.py --info build/baserom/super.img | grep "super:" | awk '{ print $5 }')
@@ -100,12 +114,33 @@ elif [[ ${is_base_rom_eu:-false} == true ]]; then
         fi
     done
     super_list=$(echo "$super_list" | sed 's/_a//g')
+    require_matching_files "$work_dir/build/baserom/images" "*.img" "super.img extraction produced no .img files"
+fi
+
+if [[ ! -d "$work_dir/build/baserom/images" ]]; then
+    error "Missing build/baserom/images after extraction"
+    exit 1
 fi
 
 for part in ${super_list}; do
+    if [[ ! -f "$work_dir/build/baserom/images/${part}.img" ]]; then
+        error "Missing required partition image: ${part}.img"
+        exit 1
+    fi
     extract_partition "$work_dir/build/baserom/images/${part}.img" "$work_dir/build/baserom/images"
     PACK_TYPE=$(cat "$work_dir/bin/ddevice/fstype.txt")
 done
+
+if [[ ! -d "$work_dir/build/baserom/images/system" && ! -d "$work_dir/build/baserom/images/system/system" ]]; then
+    error "System partition extraction is incomplete"
+    exit 1
+fi
+
+if [[ ! -d "$work_dir/build/baserom/images/vendor" ]]; then
+    error "Vendor partition extraction is incomplete"
+    exit 1
+fi
+
 echo "$device_f" > "$work_dir/bin/ddevice/device_f.txt"
 getvar=$(cat "$work_dir/bin/ddevice/device_f.txt")
 
