@@ -1,4 +1,4 @@
-const INVALID_USAGE_MESSAGE = "⚠️ <b>Usage:</b>\n<code>/mezo &lt;ROM_LINK&gt;</code>\n\nPlease send a valid ROM download link.";
+const INVALID_USAGE_MESSAGE = "⚠️ <b>Usage:</b>\n<code>/dz &lt;ROM_LINK&gt;</code>\n\nPlease send a valid ROM download link.";
 const DISPATCH_FAILURE_MESSAGE = "❌ Failed to submit your request. Please contact MEZO.";
 const HEALTH_RESPONSE = "MEZO Lite Telegram webhook is running.";
 
@@ -63,7 +63,7 @@ export default {
 
 function parseMezoCommand(text) {
   const trimmed = text.trim();
-  const match = trimmed.match(/^\/mezo(?:@[\w_]+)?(?:\s+(.+))?$/i);
+  const match = trimmed.match(/^\/(?:mezo|dz)(?:@[\w_]+)?(?:\s+(.+))?$/i);
   if (!match) {
     return { isCommand: false, romLink: null };
   }
