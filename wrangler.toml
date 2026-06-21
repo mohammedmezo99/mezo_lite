@@ -1,0 +1,13 @@
+name = "mezo-lite-bot"
+main = "worker.js"
+compatibility_date = "2026-06-21"
+
+[vars]
+TELEGRAM_CHAT_GROUP_ID = "-1003273876702"
+GITHUB_OWNER = "mohammedmezo99"
+GITHUB_REPO = "mezo_lite"
+GITHUB_WORKFLOW_FILE = "build.yml"
+MEZO_CONTACT_LINK = "https://t.me/MohamedMezo1"
+UPDATES_GROUP_LINK = "https://t.me/xDeadZone"
+SCREENSHOTS_GROUP_LINK = "https://t.me/DeadZoneCloud"
+CHAT_GROUP_LINK = "https://t.me/DeadZoneDiscussion"
