@@ -12,7 +12,7 @@ PUBLIC_ACK_MESSAGE = """✅ ROM Link Received Successfully
 Your ROM link has been sent to MEZO for processing.
 
 ⏳ Estimated build time: 40–60 minutes
-Please wait until the process is completed.
+If another build is already running, your request will wait safely in the queue.
 
 ━━━━━━━━━━━━━━
 

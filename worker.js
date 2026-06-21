@@ -111,7 +111,7 @@ function renderPublicAckHtml(env) {
     `✅ <b>ROM Link Received Successfully</b>\n\n` +
     `📨 Your ROM link has been sent to <b>MEZO</b> for processing.\n\n` +
     `⏳ <b>Estimated build time:</b> 40–60 minutes\n` +
-    `Please wait until the process is completed.\n\n` +
+    `If another build is already running, your request will wait safely in the queue.\n\n` +
     `━━━━━━━━━━━━━━\n\n` +
     `🚀 <b>DeadZone Lite</b> is now being prepared for you.\n\n` +
     `✨ Looking for something more powerful?\n\n` +
