@@ -14,7 +14,15 @@ on:
       request_source:
         description: "Request source label"
         required: false
-        default: "telegram"
+        default: "github"
+      publish_release:
+        description: "Publish release automatically?"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   build-lite:
@@ -33,6 +41,8 @@ jobs:
       RCLONE_CONFIG_BASE64: ${{ secrets.RCLONE_CONFIG_BASE64 }}
       RCLONE_REMOTE_NAME: ${{ secrets.RCLONE_REMOTE_NAME }}
       RCLONE_UPLOAD_DIR: ${{ secrets.RCLONE_UPLOAD_DIR }}
+      REQUEST_SOURCE: ${{ inputs.request_source }}
+      PUBLISH_RELEASE: ${{ inputs.publish_release }}
 
     steps:
       - name: Set current stage
@@ -111,13 +121,15 @@ jobs:
             p7zip-full \
             zstd \
             bc \
-            android-sdk-libsparse-utils
+            android-sdk-libsparse-utils \
+            golang-go
 
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends erofs-utils || true
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends xmlstarlet || true
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends zipalign || true
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends aapt || true
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends rclone || curl -fsSL https://rclone.org/install.sh | sudo bash
+          sudo env "GOBIN=/usr/local/bin" go install github.com/ssut/payload-dumper-go/cmd/payload-dumper-go@latest || true
 
           if ! command -v zipalign >/dev/null 2>&1; then
             mapfile -t zipalign_candidates < <(find /usr -type f -name zipalign 2>/dev/null || true)
@@ -146,7 +158,7 @@ jobs:
       - name: Build DeadZone Lite
         env:
           INPUT_URL: ${{ inputs.rom_link }}
-        run: bash build.sh "$INPUT_URL"
+        run: sudo -E env "PATH=$PATH" "HOME=$HOME" "GITHUB_ENV=$GITHUB_ENV" "GITHUB_WORKSPACE=$GITHUB_WORKSPACE" bash build.sh "$INPUT_URL"
 
       - name: Mark packaging stage
         run: echo "CURRENT_STAGE=package" >> "$GITHUB_ENV"
@@ -155,13 +167,13 @@ jobs:
         run: python3 notify.py private packaging_started
 
       - name: Package DeadZone Lite
-        run: bash packROM.sh
+        run: sudo -E env "PATH=$PATH" "HOME=$HOME" "GITHUB_ENV=$GITHUB_ENV" "GITHUB_WORKSPACE=$GITHUB_WORKSPACE" bash packROM.sh
 
       - name: Mark rclone setup stage
         run: echo "CURRENT_STAGE=setup_rclone" >> "$GITHUB_ENV"
 
       - name: Set up rclone
-        run: bash uploadROM.sh setup
+        run: sudo -E env "PATH=$PATH" "HOME=$HOME" "GITHUB_ENV=$GITHUB_ENV" "GITHUB_WORKSPACE=$GITHUB_WORKSPACE" bash uploadROM.sh setup
 
       - name: Mark upload stage
         run: echo "CURRENT_STAGE=upload_drive" >> "$GITHUB_ENV"
@@ -170,7 +182,7 @@ jobs:
         run: python3 notify.py private upload_started
 
       - name: Upload to Google Drive
-        run: bash uploadROM.sh
+        run: sudo -E env "PATH=$PATH" "HOME=$HOME" "GITHUB_ENV=$GITHUB_ENV" "GITHUB_WORKSPACE=$GITHUB_WORKSPACE" bash uploadROM.sh
 
       - name: Notify MEZO about success
         if: success()
@@ -182,9 +194,13 @@ jobs:
 
       - name: Post release message
         id: release_post
-        if: success()
+        if: success() && (startsWith(inputs.request_source, 'telegram') || inputs.publish_release == 'true')
         continue-on-error: true
         run: python3 notify.py release success
+
+      - name: Notify MEZO to confirm manual release
+        if: success() && !startsWith(inputs.request_source, 'telegram') && inputs.publish_release != 'true'
+        run: python3 notify.py private publish_prompt
 
       - name: Notify MEZO about release notification failure
         if: steps.release_post.outcome == 'failure'

@@ -7,7 +7,13 @@ source "$work_dir/functions.sh"
 tools_dir="${work_dir}/bin/$(uname)/$(uname -m)"
 export PATH="${tools_dir}:$PATH"
 
-super_list="vendor mi_ext odm odm_dlkm system system_dlkm vendor_dlkm product product_dlkm system_ext"
+super_list_file="$work_dir/bin/ddevice/super_list.txt"
+if [[ ! -s "$super_list_file" ]]; then
+    error "Missing resolved super partition list: bin/ddevice/super_list.txt"
+    exit 1
+fi
+
+super_list=$(< "$super_list_file")
 androidVER=$(< "$work_dir/bin/ddevice/androidver.txt")
 getvar=$(< "$work_dir/bin/ddevice/device_f.txt")
 PACK_TYPE=$(< "$work_dir/bin/ddevice/fstype.txt")
@@ -67,7 +73,11 @@ if [[ "$is_ab_device" == false ]]; then
     GROUP_SIZE=$((superSize - 268435456))
     lpargs="-F --output build/baserom/images/super.img --metadata-size 65536 --super-name super --metadata-slots 2 --block-size 4096 --device super:$superSize --group=qti_dynamic_partitions:$GROUP_SIZE"
 
-    for pname in odm mi_ext system system_ext product vendor; do
+    for pname in ${super_list}; do
+        case "$pname" in
+            odm|mi_ext|system|system_ext|product|vendor) ;;
+            *) continue ;;
+        esac
         if [[ -f "build/baserom/images/${pname}.img" ]]; then
             if [[ "$OSTYPE" == "darwin"* ]]; then
                 subsize=$(stat -f%z "build/baserom/images/${pname}.img")

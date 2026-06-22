@@ -11,13 +11,14 @@ repS="python3 $work_dir/bin/strRep.py"
 
 
 if [[ $androidVER == "16" ]]; then
+MOD_NAME="Notification Fix SystemUI"
 mods "Patching Notification Fix to SystemUI"
-#ready for patch
 mkdir -p $work_dir/apk_temp
-isMiuiSystemUIDIR=$(find "$MAIN_FOLDER" -type d -name "MiuiSystemUI")
-isMiuiSystemUI=$(find "$MAIN_FOLDER" -type f -name "MiuiSystemUI.apk")
-$APKEDITOR d -t raw -f -no-dex-debug -i $isMiuiSystemUI -o $work_dir/apk_temp/isMiuiSystemUI.apk.out >/dev/null 2>&1
+isMiuiSystemUI=$(find_apk_or_skip "$MOD_NAME" "MiuiSystemUI.apk") || exit 0
+isMiuiSystemUIDIR=$(dirname "$isMiuiSystemUI")
 FOLDER="$work_dir/apk_temp/isMiuiSystemUI.apk.out"
+$APKEDITOR d -t raw -f -no-dex-debug -i "$isMiuiSystemUI" -o "$FOLDER" >/dev/null 2>&1 || true
+apk_out_exists_or_skip "$MOD_NAME" "$FOLDER" || { rm -rf "$work_dir/apk_temp"; exit 0; }
 find_and_replace() {
     local search=$1
     local replace=$2
@@ -50,16 +51,16 @@ find_and_replace() {
 
 
 #Finishing
-MiuiSystemUI=$(basename $isMiuiSystemUI)
-$APKEDITOR b -f -i $work_dir/apk_temp/isMiuiSystemUI.apk.out -o $work_dir/apk_temp/final/$MiuiSystemUI >/dev/null 2>&1
+MiuiSystemUI=$(basename "$isMiuiSystemUI")
+$APKEDITOR b -f -i "$FOLDER" -o "$work_dir/apk_temp/final/$MiuiSystemUI" >/dev/null 2>&1
 
 if [ -f "$work_dir/apk_temp/final/$MiuiSystemUI" ]; then
-    rm -rf $isMiuiSystemUIDIR/oat
-	rm -rf $isMiuiSystemUIDIR/$MiuiSystemUI
-    cp -rf $work_dir/apk_temp/final/$MiuiSystemUI $isMiuiSystemUIDIR
+    rm -rf "$isMiuiSystemUIDIR/oat"
+	rm -rf "$isMiuiSystemUIDIR/$MiuiSystemUI"
+    cp -rf "$work_dir/apk_temp/final/$MiuiSystemUI" "$isMiuiSystemUIDIR"
 fi
 
-rm -rf $work_dir/apk_temp
+rm -rf "$work_dir/apk_temp"
 mods "Done"
 
 fi

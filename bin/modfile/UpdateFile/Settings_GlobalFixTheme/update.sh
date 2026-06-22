@@ -6,45 +6,47 @@ APKEDITOR="java -jar $WORK_DIR/bin/apktool/apke.jar"
 regionTYPE=$(cat $WORK_DIR/bin/ddevice/device_type.txt)
 
 if [[ $regionTYPE == *"Global"* ]];then
-    #ready for patch
+    MOD_NAME="Settings Global Fix Theme"
 	mods "Fixing Theme Issues"
     mkdir -p $WORK_DIR/apk_temp
-    isSettingsDIR=$(find "$MAIN_FOLDER" -type d -name "Settings")
-    isSettings=$(find "$MAIN_FOLDER" -type f -name "Settings.apk")
+    isSettings=$(find_apk_or_skip "$MOD_NAME" "Settings.apk") || exit 0
+    isSettingsDIR=$(dirname "$isSettings")
+    OUT_DIR="$WORK_DIR/apk_temp/isSettings.apk.out"
 
-    $APKEDITOR d -t raw -f -no-dex-debug -i $isSettings -o $WORK_DIR/apk_temp/isSettings.apk.out >/dev/null 2>&1
-    isMiuiSettingsSmali=$(find "$WORK_DIR/apk_temp/isSettings.apk.out" -type f -name MiuiSettings.smali)
+    $APKEDITOR d -t raw -f -no-dex-debug -i "$isSettings" -o "$OUT_DIR" >/dev/null 2>&1 || true
+    apk_out_exists_or_skip "$MOD_NAME" "$OUT_DIR" || { rm -rf "$WORK_DIR/apk_temp"; exit 0; }
+    isMiuiSettingsSmali=$(safe_find_smali "$MOD_NAME" "$OUT_DIR" "MiuiSettings.smali") || { rm -rf "$WORK_DIR/apk_temp"; exit 0; }
 
     #patching
     sed -i '
     /sget v10, Lcom\/android\/settings\/R$id;->personalize_title:I/,/sget-boolean v10, Lmiui\/os\/Build;->IS_INTERNATIONAL_BUILD:Z/ {
         /sget-boolean v10, Lmiui\/os\/Build;->IS_INTERNATIONAL_BUILD:Z/c\    const/4 v10, 0
     }
-    ' $isMiuiSettingsSmali
+    ' "$isMiuiSettingsSmali"
 
     sed -i '
     /sget v10, Lcom\/android\/settings\/R$id;->theme_settings:I/,/sget-boolean v10, Lmiui\/os\/Build;->IS_INTERNATIONAL_BUILD:Z/ {
         /sget-boolean v10, Lmiui\/os\/Build;->IS_INTERNATIONAL_BUILD:Z/c\    const/4 v10, 0
     }
-    ' $isMiuiSettingsSmali
+    ' "$isMiuiSettingsSmali"
 
     sed -i '
     /sget v10, Lcom\/android\/settings\/R$id;->wallpaper_settings:I/,/sget-boolean v10, Lmiui\/os\/Build;->IS_INTERNATIONAL_BUILD:Z/ {
         /sget-boolean v10, Lmiui\/os\/Build;->IS_INTERNATIONAL_BUILD:Z/c\    const/4 v10, 0
     }
-    ' $isMiuiSettingsSmali
+    ' "$isMiuiSettingsSmali"
 
 
     #Finishing
-    Settings=$(basename $isSettings)
-    $APKEDITOR b -f -i $WORK_DIR/apk_temp/isSettings.apk.out -o $WORK_DIR/apk_temp/final/$Settings >/dev/null 2>&1
+    Settings=$(basename "$isSettings")
+    $APKEDITOR b -f -i "$OUT_DIR" -o "$WORK_DIR/apk_temp/final/$Settings" >/dev/null 2>&1
 
     if [ -f "$WORK_DIR/apk_temp/final/$Settings" ]; then
-        rm -rf $isSettingsDIR/*
-        cp -rf $WORK_DIR/apk_temp/final/$Settings $isSettingsDIR
+        rm -rf "$isSettingsDIR"/*
+        cp -rf "$WORK_DIR/apk_temp/final/$Settings" "$isSettingsDIR"
     fi
 
-    rm -rf $WORK_DIR/apk_temp
+    rm -rf "$WORK_DIR/apk_temp"
 	mods "Done"
 else
     mods "This Android version is not supported"

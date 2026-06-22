@@ -344,3 +344,76 @@ patch_sepolicy() {
         fi
     fi
 }
+
+find_rom_path_by_name() {
+    local target_type="$1"
+    local target_name="$2"
+    local search_root=""
+    local match=""
+
+    for search_root in \
+        "$WORK_DIR/build/baserom/images/system" \
+        "$WORK_DIR/build/baserom/images/product" \
+        "$WORK_DIR/build/baserom/images/system_ext" \
+        "$WORK_DIR/build/baserom/images/vendor" \
+        "$WORK_DIR/build/baserom/images/mi_ext"; do
+        [[ -d "$search_root" ]] || continue
+        match=$(find "$search_root" -type "$target_type" -name "$target_name" 2>/dev/null | head -n 1)
+        if [[ -n "$match" ]]; then
+            printf '%s\n' "$match"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+find_rom_apk_path() {
+    find_rom_path_by_name f "$1"
+}
+
+find_rom_dir_path() {
+    find_rom_path_by_name d "$1"
+}
+
+find_apk_or_skip() {
+    local mod_name="$1"
+    local apk_name="$2"
+    local apk_path=""
+
+    apk_path=$(find_rom_apk_path "$apk_name" || true)
+    if [[ -z "$apk_path" || ! -f "$apk_path" ]]; then
+        warn "$mod_name: ${apk_name} not found, skipping safely"
+        return 1
+    fi
+
+    printf '%s\n' "$apk_path"
+}
+
+apk_out_exists_or_skip() {
+    local mod_name="$1"
+    local out_dir="$2"
+
+    if [[ ! -d "$out_dir" ]]; then
+        warn "$mod_name: decompile output missing, skipping safely"
+        return 1
+    fi
+
+    return 0
+}
+
+safe_find_smali() {
+    local mod_name="$1"
+    local out_dir="$2"
+    local target_name="$3"
+    local match=""
+
+    apk_out_exists_or_skip "$mod_name" "$out_dir" || return 1
+    match=$(find "$out_dir" -type f -name "$target_name" 2>/dev/null | head -n 1)
+    if [[ -z "$match" || ! -f "$match" ]]; then
+        warn "$mod_name: ${target_name} not found, skipping safely"
+        return 1
+    fi
+
+    printf '%s\n' "$match"
+}

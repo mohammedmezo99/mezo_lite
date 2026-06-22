@@ -1,5 +1,5 @@
-const INVALID_USAGE_MESSAGE = "⚠️ <b>Usage:</b>\n<code>/dz &lt;ROM_LINK&gt;</code>\n\nPlease send a valid ROM download link.";
-const DISPATCH_FAILURE_MESSAGE = "❌ Failed to submit your request. Please contact MEZO.";
+const INVALID_USAGE_MESSAGE = "<b>Usage:</b>\n<code>/dz &lt;ROM_LINK&gt;</code>\n\nPlease send a valid ROM download link.";
+const DISPATCH_FAILURE_MESSAGE = "Build request could not be submitted. Please contact MEZO.";
 const HEALTH_RESPONSE = "MEZO Lite Telegram webhook is running.";
 
 export default {
@@ -44,12 +44,9 @@ export default {
         return new Response("OK", { status: 200 });
       }
 
-      await sendTelegramMessage(env, chatId, renderPublicAckHtml(env), message.message_id, "HTML");
+      await sendTelegramMessage(env, chatId, renderPublicAckHtml(), message.message_id, "HTML");
 
-      const builderName = getBuilderName(message.from);
-      const builderId = String(message.from?.id ?? "");
-      const dispatched = await dispatchWorkflow(env, parsed.romLink, builderName, builderId);
-
+      const dispatched = await dispatchWorkflow(env, parsed.romLink);
       if (!dispatched) {
         await sendTelegramMessage(env, chatId, DISPATCH_FAILURE_MESSAGE, message.message_id, "HTML");
       }
@@ -89,64 +86,13 @@ function isValidHttpUrl(value) {
   }
 }
 
-function getBuilderName(from) {
-  if (typeof from?.username === "string" && from.username.trim()) {
-    return from.username.trim();
-  }
-
-  if (typeof from?.first_name === "string" && from.first_name.trim()) {
-    return from.first_name.trim();
-  }
-
-  return "Telegram User";
-}
-
-function renderPublicAckHtml(env) {
-  const mezoContactLink = toSafeTelegramLink(env.MEZO_CONTACT_LINK);
-  const updatesGroupLink = toSafeTelegramLink(env.UPDATES_GROUP_LINK);
-  const screenshotsGroupLink = toSafeTelegramLink(env.SCREENSHOTS_GROUP_LINK);
-  const chatGroupLink = toSafeTelegramLink(env.CHAT_GROUP_LINK);
-
+function renderPublicAckHtml() {
   return (
-    `✅ <b>ROM Link Received Successfully</b>\n\n` +
-    `📨 Your ROM link has been sent to <b>MEZO</b> for processing.\n\n` +
-    `⏳ <b>Estimated build time:</b> 40–60 minutes\n` +
-    `If another build is already running, your request will wait safely in the queue.\n\n` +
-    `━━━━━━━━━━━━━━\n\n` +
-    `🚀 <b>DeadZone Lite</b> is now being prepared for you.\n\n` +
-    `✨ Looking for something more powerful?\n\n` +
-    `🎮 <b>DeadZone GamingPlus</b>\n` +
-    `👑 <b>DeadZone Legend</b>\n` +
-    `⚔️ <b>DeadZone Ninja</b>\n\n` +
-    `⚡ These premium systems include more advanced features, stronger optimization, and a more exclusive experience.\n\n` +
-    `💎 <b>Premium ROMs are paid systems.</b>\n` +
-    `For details, contact <a href="${mezoContactLink}">MEZO</a>.\n\n` +
-    `━━━━━━━━━━━━━━\n\n` +
-    `📢 <a href="${updatesGroupLink}">Updates Channel</a>\n\n` +
-    `🖼️ <a href="${screenshotsGroupLink}">Screenshots Channel</a>\n\n` +
-    `💬 <a href="${chatGroupLink}">Community Chat</a>\n\n` +
-    `✨ Thank you for choosing <b>DeadZone</b>.`
+    "<b>DeadZone Lite build queued.</b>\n\n" +
+    "Your ROM link was received and sent for processing.\n" +
+    "Estimated build time: 40-60 minutes.\n" +
+    "If another build is running, your request will wait safely in queue."
   );
-}
-
-function toSafeTelegramLink(value) {
-  try {
-    const parsed = new URL(value ?? "");
-    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
-      return escapeHtmlAttribute(parsed.toString());
-    }
-  } catch {
-    return "#";
-  }
-  return "#";
-}
-
-function escapeHtmlAttribute(value) {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
 }
 
 async function sendTelegramMessage(env, chatId, text, replyToMessageId, parseMode = "HTML") {
@@ -167,7 +113,7 @@ async function sendTelegramMessage(env, chatId, text, replyToMessageId, parseMod
   }
 }
 
-async function dispatchWorkflow(env, romLink, builderName, builderId) {
+async function dispatchWorkflow(env, romLink) {
   try {
     const response = await fetch(
       `https://api.github.com/repos/${env.GITHUB_OWNER}/${env.GITHUB_REPO}/actions/workflows/${env.GITHUB_WORKFLOW_FILE}/dispatches`,
@@ -184,7 +130,8 @@ async function dispatchWorkflow(env, romLink, builderName, builderId) {
           ref: "main",
           inputs: {
             rom_link: romLink,
-            request_source: `telegram:${builderName}:${builderId}`,
+            request_source: "telegram",
+            publish_release: "true",
           },
         }),
       },

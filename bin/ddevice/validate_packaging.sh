@@ -73,7 +73,8 @@ if [[ ! -f "$tmp_dir/out/$expected_name" ]]; then
     exit 1
 fi
 
-if [[ -f "$tmp_dir/out/package.zip" ]]; then
+legacy_package_zip="$tmp_dir/out/"'package.zip'
+if [[ -f "$legacy_package_zip" ]]; then
     error "package.zip should not be produced"
     exit 1
 fi

@@ -19,7 +19,7 @@ normalize_region() {
     case "${1,,}" in
         china) echo "ChinaStable" ;;
         global) echo "GlobalStable" ;;
-        eeaglobal) echo "EeaStable" ;;
+        eeaglobal|europe) echo "EEAStable" ;;
         inglobal) echo "IndiaStable" ;;
         idglobal) echo "IndonesiaStable" ;;
         ruglobal) echo "RussiaStable" ;;

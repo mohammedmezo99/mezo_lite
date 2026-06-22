@@ -13,19 +13,20 @@ TIMEOUT = 30
 RELEASE_IMAGE = ROOT / "assets" / "release" / "lite.png"
 
 PRIVATE_STAGE_MESSAGES = {
-    "request_received": "📥 New DeadZone Lite build request received",
-    "build_started": "🛠️ Build started",
-    "packaging_started": "📦 Packaging started",
-    "upload_started": "☁️ Upload started to Google Drive",
-    "success": "✅ Build completed successfully",
-    "fail": "❌ Build failed",
+    "request_received": "DeadZone Lite build request received",
+    "build_started": "Build started",
+    "packaging_started": "Packaging started",
+    "upload_started": "Upload started to Google Drive",
+    "success": "Build completed successfully",
+    "fail": "Build failed",
+    "publish_prompt": "Publish decision required",
 }
 
 REGION_MAP = {
     "china": "ChinaStable",
     "global": "GlobalStable",
-    "eeaglobal": "EeaStable",
-    "europe": "EeaStable",
+    "eeaglobal": "EEAStable",
+    "europe": "EEAStable",
     "inglobal": "IndiaStable",
     "indiaglobal": "IndiaStable",
     "idglobal": "IndonesiaStable",
@@ -37,6 +38,7 @@ REGION_MAP = {
     "trglobal": "TurkeyStable",
     "turkeyglobal": "TurkeyStable",
     "jpglobal": "JapanStable",
+    "japanglobal": "JapanStable",
 }
 
 REGION_BASE_TEXT = {
@@ -44,10 +46,11 @@ REGION_BASE_TEXT = {
     "ChinaStable": "Based on pure China ROM",
     "IndiaStable": "Based on pure Indian ROM",
     "IndonesiaStable": "Based on pure Indonesian ROM",
-    "EeaStable": "Based on pure EEA ROM",
+    "EEAStable": "Based on pure EEA ROM",
     "RussiaStable": "Based on pure Russia ROM",
     "TurkeyStable": "Based on pure Turkey ROM",
     "TaiwanStable": "Based on pure Taiwan ROM",
+    "JapanStable": "Based on pure Japan ROM",
 }
 
 
@@ -201,13 +204,33 @@ def get_metadata() -> dict:
     }
 
 
+def humanize_stage(stage: str) -> str:
+    mapping = {
+        "checkout": "checkout",
+        "request_acknowledged": "request acknowledgement",
+        "install_dependencies": "dependency installation",
+        "parse_rom_metadata": "ROM metadata parsing",
+        "build": "build",
+        "package": "packaging",
+        "setup_rclone": "rclone setup",
+        "upload_drive": "Google Drive upload",
+        "release_post": "release notification",
+        "release_notification": "release notification",
+    }
+    return mapping.get((stage or "").strip(), stage or "unknown")
+
+
 def format_private_message(status: str, stage: str = "") -> str:
     metadata = get_metadata()
-    header = PRIVATE_STAGE_MESSAGES.get(status, "ℹ️ Status update")
+    header = PRIVATE_STAGE_MESSAGES.get(status, "Status update")
     details = []
+    request_source = (os.environ.get("REQUEST_SOURCE") or "").strip().lower()
 
     if status == "request_received":
-        details.append("DeadZone Lite request has been accepted from the public group.")
+        if request_source.startswith("telegram"):
+            details.append("DeadZone Lite request received from Telegram.")
+        else:
+            details.append("Manual GitHub build request received.")
     elif status == "build_started":
         details.append(
             f"Build started for {metadata['codename']} | {metadata['rom_version']} | {metadata['region']} | {metadata['android']}"
@@ -224,6 +247,17 @@ def format_private_message(status: str, stage: str = "") -> str:
         details.append(f"Android: {metadata['android']}")
         if metadata["drive_link"]:
             details.append(f"Drive Link: {metadata['drive_link']}")
+    elif status == "publish_prompt":
+        details.append("Manual GitHub build completed.")
+        details.append("This build was uploaded but not posted publicly.")
+        details.append(f"File: {metadata['filename']}")
+        details.append(f"Device: {metadata['codename']}")
+        details.append(f"ROM Version: {metadata['rom_version']}")
+        details.append(f"Region: {metadata['region']}")
+        details.append(f"Android: {metadata['android']}")
+        if metadata["drive_link"]:
+            details.append(f"Drive Link: {metadata['drive_link']}")
+        details.append("Publish to release channel? Yes / No")
     elif status == "fail":
         failure_stage = stage or os.environ.get("CURRENT_STAGE", "unknown")
         details.append(f"Stage: {humanize_stage(failure_stage)}")
@@ -239,52 +273,30 @@ def format_release_caption() -> str:
         raise RuntimeError("Missing Google Drive link")
 
     mezo_contact_link = safe_link(os.environ.get("MEZO_CONTACT_LINK", ""))
-    updates_group_link = safe_link(os.environ.get("UPDATES_GROUP_LINK", ""))
-    screenshots_group_link = safe_link(os.environ.get("SCREENSHOTS_GROUP_LINK", ""))
     discussion_link = safe_link(os.environ.get("CHAT_GROUP_LINK", ""))
     changelog_link = safe_link(os.environ.get("CHANGELOG_LINK") or os.environ.get("UPDATES_GROUP_LINK", ""))
     screenshots_link = safe_link(os.environ.get("SCREENSHOTS_POST_LINK") or os.environ.get("SCREENSHOTS_GROUP_LINK", ""))
     download_link = safe_link(drive_link)
 
     return (
-        f"🌟 <b>DeadZone Lite v{html.escape(metadata['version'])}</b>\n\n"
-        f"🪄 <b>{html.escape(metadata['hyperos_major'])}</b> • <b>{html.escape(metadata['rom_version'])}</b>\n"
-        f"🌍 <b>{html.escape(metadata['region'])}</b> • 🤖 <b>{html.escape(metadata['android'])}</b> • ⚙️ <b>{html.escape(metadata['platform'])}</b>\n\n"
-        f"━━━━━━━━━━━━━━\n\n"
-        f"📱 <b>Device</b>\n{html.escape(metadata['device_name'])}\n\n"
-        f"🏷️ <b>Code Name</b>\n#{html.escape(metadata['codename_lower'])}\n\n"
-        f"📅 <b>Release Date</b>\n{html.escape(metadata['date'])}\n\n"
-        f"🧬 <b>Base</b>\n{html.escape(metadata['region_base_text'])}\n\n"
-        f"🎨 <b>Style</b>\nDeadZone Lite\n\n"
-        f"👨‍💻 <b>Developer</b> <a href=\"{mezo_contact_link}\">MEZO</a>\n\n"
-        f"━━━━━━━━━━━━━━\n\n"
-        f"📝 <b>Changelog</b> <a href=\"{changelog_link}\">Here</a>\n\n"
-        f"☁️ <b>Downloads</b> <a href=\"{download_link}\">Here</a>\n\n"
-        f"🖼️ <b>Screenshots</b> <a href=\"{screenshots_link}\">Here</a>\n\n"
-        f"💬 <b>Discussion</b> <a href=\"{discussion_link}\">Here</a>\n\n"
-        f"━━━━━━━━━━━━━━\n\n"
+        f"<b>DeadZone Lite v{html.escape(metadata['version'])}</b>\n\n"
+        f"<b>{html.escape(metadata['hyperos_major'])}</b> • <b>{html.escape(metadata['rom_version'])}</b>\n"
+        f"<b>{html.escape(metadata['region'])}</b> • <b>{html.escape(metadata['android'])}</b> • <b>{html.escape(metadata['platform'])}</b>\n\n"
+        f"<b>Device</b>\n{html.escape(metadata['device_name'])}\n\n"
+        f"<b>Code Name</b>\n#{html.escape(metadata['codename_lower'])}\n\n"
+        f"<b>Release Date</b>\n{html.escape(metadata['date'])}\n\n"
+        f"<b>Base</b>\n{html.escape(metadata['region_base_text'])}\n\n"
+        f"<b>Developer</b> <a href=\"{mezo_contact_link}\">MEZO</a>\n\n"
+        f"<b>Changelog</b> <a href=\"{changelog_link}\">Here</a>\n"
+        f"<b>Download</b> <a href=\"{download_link}\">Here</a>\n"
+        f"<b>Screenshots</b> <a href=\"{screenshots_link}\">Here</a>\n"
+        f"<b>Discussion</b> <a href=\"{discussion_link}\">Here</a>\n\n"
         f"#{html.escape(metadata['codename_lower'])} "
         f"#{html.escape(metadata['os_tag'])} "
         f"#{html.escape(metadata['hyperos_tag'])} "
         f"#{html.escape(metadata['android_hash_tag'])} "
         f"#DeadZone #DeadZoneLite #MEZO"
     )
-
-
-def humanize_stage(stage: str) -> str:
-    mapping = {
-        "checkout": "checkout",
-        "request_acknowledged": "request acknowledgement",
-        "install_dependencies": "dependency installation",
-        "parse_rom_metadata": "ROM metadata parsing",
-        "build": "build",
-        "package": "packaging",
-        "setup_rclone": "rclone setup",
-        "upload_drive": "Google Drive upload",
-        "release_post": "release notification",
-        "release_notification": "release notification",
-    }
-    return mapping.get((stage or "").strip(), stage or "unknown")
 
 
 def send_telegram_message(chat_id: str, text: str, parse_mode: str | None = None) -> None:
@@ -351,6 +363,7 @@ def usage() -> str:
     return (
         "Usage:\n"
         "  python notify.py private <request_received|build_started|packaging_started|upload_started|success|fail> [stage]\n"
+        "  python notify.py private publish_prompt\n"
         "  python notify.py release success\n"
         "  python notify.py filename"
     )

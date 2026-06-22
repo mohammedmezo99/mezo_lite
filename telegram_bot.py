@@ -7,44 +7,15 @@ import requests
 
 TIMEOUT = 30
 POLL_INTERVAL = 3
-PUBLIC_ACK_MESSAGE = """✅ ROM Link Received Successfully
+PUBLIC_ACK_MESSAGE = """Build queued successfully.
 
-Your ROM link has been sent to MEZO for processing.
+Your ROM link was received and sent for processing.
 
-⏳ Estimated build time: 40–60 minutes
-If another build is already running, your request will wait safely in the queue.
-
-━━━━━━━━━━━━━━
-
-DeadZone Lite is now being prepared for you.
-
-Looking for something more powerful?
-
-DeadZone GamingPlus
-DeadZone Legend
-DeadZone Ninja
-
-These premium systems include more advanced features, stronger optimization, and a more exclusive experience.
-
-Premium ROMs are paid systems.
-For details, contact MEZO:
-{mezo_contact_link}
-
-━━━━━━━━━━━━━━
-
-Updates Channel
-{updates_group_link}
-
-Screenshots Channel
-{screenshots_group_link}
-
-Community Chat
-{chat_group_link}
-
-✨ Thank you for choosing DeadZone."""
+Estimated build time: 40-60 minutes.
+If another build is already running, your request will wait safely in queue."""
 
 USAGE_MESSAGE = "Usage: /mezo <ROM_LINK>"
-PUBLIC_FAILURE_MESSAGE = "❌ Failed to submit your request. Please contact MEZO."
+PUBLIC_FAILURE_MESSAGE = "Build request could not be submitted. Please contact MEZO."
 
 
 def get_env(name: str, default: str = "") -> str:
@@ -92,6 +63,7 @@ def dispatch_workflow(rom_link: str) -> None:
             "inputs": {
                 "rom_link": rom_link,
                 "request_source": "telegram",
+                "publish_release": "true",
             },
         },
         timeout=TIMEOUT,
@@ -121,17 +93,7 @@ def handle_mezo_command(bot_token: str, update: dict, public_chat_id: str) -> No
         send_message(bot_token, chat_id, PUBLIC_FAILURE_MESSAGE, reply_to_message_id=message_id)
         return
 
-    send_message(
-        bot_token,
-        chat_id,
-        PUBLIC_ACK_MESSAGE.format(
-            mezo_contact_link=os.environ.get("MEZO_CONTACT_LINK", ""),
-            updates_group_link=os.environ.get("UPDATES_GROUP_LINK", ""),
-            screenshots_group_link=os.environ.get("SCREENSHOTS_GROUP_LINK", ""),
-            chat_group_link=os.environ.get("CHAT_GROUP_LINK", ""),
-        ),
-        reply_to_message_id=message_id,
-    )
+    send_message(bot_token, chat_id, PUBLIC_ACK_MESSAGE, reply_to_message_id=message_id)
 
 
 def main() -> int:

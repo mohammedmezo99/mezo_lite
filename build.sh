@@ -19,7 +19,7 @@ else
 fi
 
 check unzip aria2c 7z zip java zipalign python3 zstd bc
-check jq brotli simg2img lpmake make_ext4fs mkfs.erofs payload-extract
+check jq brotli simg2img lpmake make_ext4fs mkfs.erofs
 
 rm -rf "$work_dir/out"
 rm -rf "$work_dir/build"
@@ -70,7 +70,6 @@ require_matching_files() {
 resolve_present_super_list() {
     local candidates="$1"
     local present_parts=()
-    local missing_optional=()
     local part=""
     local img_path=""
 
@@ -79,7 +78,7 @@ resolve_present_super_list() {
         if [[ -f "$img_path" ]]; then
             present_parts+=("$part")
         else
-            missing_optional+=("$part")
+            printf '[WARN] - Optional partition missing, skipping: %s.img\n' "$part" >&2
         fi
     done
 
@@ -90,16 +89,57 @@ resolve_present_super_list() {
         fi
     done
 
-    for part in "${missing_optional[@]}"; do
-        warn "Optional partition missing, skipping: ${part}.img"
-    done
-
     if [[ ${#present_parts[@]} -eq 0 ]]; then
         error "No usable super partition images were extracted"
         exit 1
     fi
 
     printf '%s\n' "${present_parts[*]}"
+}
+
+normalize_partition_list() {
+    local raw_list="$1"
+
+    if [[ -z "$raw_list" ]]; then
+        return 0
+    fi
+
+    printf '%s\n' "$raw_list" | tr ' ' '\n' | awk 'NF && !seen[$0]++ {print}' | paste -sd' ' -
+}
+
+validate_resolved_super_list() {
+    local resolved_list="$1"
+    local token=""
+
+    if printf '%s\n' "$resolved_list" | grep -Eq '(\[WARN\]|Optional|skipping:|missing,|^-|-\.)'; then
+        error "Resolved super partition list is contaminated: $resolved_list"
+        exit 1
+    fi
+
+    for token in $resolved_list; do
+        if [[ ! "$token" =~ ^[a-z0-9_]+$ ]]; then
+            error "Invalid token in resolved super partition list: $token"
+            exit 1
+        fi
+    done
+}
+
+extract_payload_images() {
+    if command -v payload-dumper-go >/dev/null 2>&1; then
+        unpack "Unpacking payload.bin with payload-dumper-go"
+        payload-dumper-go -o build/baserom/images/ build/baserom/payload.bin >/dev/null 2>&1 || return 1
+        return 0
+    fi
+
+    if command -v payload-extract >/dev/null 2>&1; then
+        warn "payload-dumper-go unavailable, falling back to payload-extract"
+        unpack "Unpacking payload.bin with payload-extract"
+        payload-extract extract -o build/baserom/images/ build/baserom/payload.bin >/dev/null 2>&1 || return 1
+        return 0
+    fi
+
+    error "Missing payload extractor: payload-dumper-go and payload-extract are unavailable"
+    return 1
 }
 
 if [[ ${baserom_type:-} == "payload" ]]; then
@@ -124,10 +164,11 @@ elif [[ ${is_base_rom_eu:-false} == true ]]; then
 fi
 
 if [[ ${baserom_type:-} == "payload" ]]; then
-    unpack "Unpacking payload.bin"
-    payload-extract extract -o build/baserom/images/ build/baserom/payload.bin >/dev/null 2>&1 || error "Unpacking payload.bin failed"
+    extract_payload_images || { error "Unpacking payload.bin failed"; exit 1; }
     require_matching_files "$work_dir/build/baserom/images" "*.img" "Payload extraction produced no .img files"
     present_super_list=$(resolve_present_super_list "$super_list")
+    present_super_list=$(normalize_partition_list "$present_super_list")
+    validate_resolved_super_list "$present_super_list"
     super_list="$present_super_list"
 elif [[ ${baserom_type:-} == "br" ]]; then
     super_list=$(grep "add " build/baserom/dynamic_partitions_op_list | awk '{ print $2 }')
@@ -153,6 +194,10 @@ elif [[ ${is_base_rom_eu:-false} == true ]]; then
     super_list=$(echo "$super_list" | sed 's/_a//g')
     require_matching_files "$work_dir/build/baserom/images" "*.img" "super.img extraction produced no .img files"
 fi
+
+super_list=$(normalize_partition_list "$super_list")
+validate_resolved_super_list "$super_list"
+printf '%s\n' "$super_list" > "$work_dir/bin/ddevice/super_list.txt"
 
 if [[ ! -d "$work_dir/build/baserom/images" ]]; then
     error "Missing build/baserom/images after extraction"
