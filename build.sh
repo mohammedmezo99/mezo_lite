@@ -67,6 +67,41 @@ require_matching_files() {
     fi
 }
 
+resolve_present_super_list() {
+    local candidates="$1"
+    local present_parts=()
+    local missing_optional=()
+    local part=""
+    local img_path=""
+
+    for part in $candidates; do
+        img_path="$work_dir/build/baserom/images/${part}.img"
+        if [[ -f "$img_path" ]]; then
+            present_parts+=("$part")
+        else
+            missing_optional+=("$part")
+        fi
+    done
+
+    for part in system vendor product; do
+        if [[ ! -f "$work_dir/build/baserom/images/${part}.img" ]]; then
+            error "Missing core partition image: ${part}.img"
+            exit 1
+        fi
+    done
+
+    for part in "${missing_optional[@]}"; do
+        warn "Optional partition missing, skipping: ${part}.img"
+    done
+
+    if [[ ${#present_parts[@]} -eq 0 ]]; then
+        error "No usable super partition images were extracted"
+        exit 1
+    fi
+
+    printf '%s\n' "${present_parts[*]}"
+}
+
 if [[ ${baserom_type:-} == "payload" ]]; then
     unpack "Extracting payload.bin"
     unzip "${baserom}" payload.bin -d build/baserom >/dev/null 2>&1 || error "Extracting payload.bin failed"
@@ -92,6 +127,8 @@ if [[ ${baserom_type:-} == "payload" ]]; then
     unpack "Unpacking payload.bin"
     payload-extract extract -o build/baserom/images/ build/baserom/payload.bin >/dev/null 2>&1 || error "Unpacking payload.bin failed"
     require_matching_files "$work_dir/build/baserom/images" "*.img" "Payload extraction produced no .img files"
+    present_super_list=$(resolve_present_super_list "$super_list")
+    super_list="$present_super_list"
 elif [[ ${baserom_type:-} == "br" ]]; then
     super_list=$(grep "add " build/baserom/dynamic_partitions_op_list | awk '{ print $2 }')
     unpack "Converting Brotli partitions"
@@ -124,8 +161,8 @@ fi
 
 for part in ${super_list}; do
     if [[ ! -f "$work_dir/build/baserom/images/${part}.img" ]]; then
-        error "Missing required partition image: ${part}.img"
-        exit 1
+        warn "Optional partition missing, skipping: ${part}.img"
+        continue
     fi
     extract_partition "$work_dir/build/baserom/images/${part}.img" "$work_dir/build/baserom/images"
     PACK_TYPE=$(cat "$work_dir/bin/ddevice/fstype.txt")
